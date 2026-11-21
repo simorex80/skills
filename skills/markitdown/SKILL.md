@@ -51,3 +51,19 @@ Add `--recursive` only when subdirectories are requested. The output directory m
 ## Report
 
 Return the Markdown content or respond to the user's original document task after `extract`; report the exact output path for `convert`; for `batch`, report converted and failed counts with failed source names. Never claim success based only on the absence of an exception.
+
+## Isolated conversion of untrusted files (Linux)
+
+Build the reviewed image from the repository root (network access is required **only at image-build time**):
+
+```sh
+podman build -f skills/markitdown/Dockerfile -t local/skills-markitdown:reviewed skills/markitdown
+```
+
+Extract a single untrusted document with a read-only file-only mount, no container network, read-only root filesystem, dropped capabilities and CPU/RAM/process limits:
+
+```sh
+bash skills/markitdown/scripts/sandbox-extract.sh path/to/document.pdf > extracted.md
+```
+
+Use `CONTAINER_RUNTIME=docker` for Docker instead of Podman. Do not pass host credentials or mount the whole workspace. Build and scan the image in your trusted environment; the container profile limits access but does not protect against every container-runtime/kernel vulnerability. The wrapper uses the pinned CI dependency baseline for Python 3.11 inside the image. The helper only implements `extract`; publish output on the host explicitly if required.
