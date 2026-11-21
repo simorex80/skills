@@ -81,3 +81,19 @@ The dedicated [Remote LLM Wiki integration repository](https://github.com/simore
 Create `skills/<name>/SKILL.md` with YAML frontmatter containing `name` and `description`. Match `name` to the directory name, document any prerequisites, and add the skill to the table above. Run `/skills info <name>` and try a representative request before sharing it.
 
 [Copilot CLI plugin documentation](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/plugins-finding-installing) · [Microsoft MarkItDown](https://github.com/microsoft/markitdown)
+
+## Isolated conversion of untrusted files (Linux)
+
+Build the reviewed image from the repository root (network access is required **only at image-build time**):
+
+```sh
+podman build -f skills/markitdown/Dockerfile -t local/skills-markitdown:reviewed skills/markitdown
+```
+
+Extract a single untrusted document with a read-only file-only mount, no container network, read-only root filesystem, dropped capabilities and CPU/RAM/process limits:
+
+```sh
+bash skills/markitdown/scripts/sandbox-extract.sh path/to/document.pdf > extracted.md
+```
+
+Use `CONTAINER_RUNTIME=docker` for Docker instead of Podman. Do not pass host credentials or mount the whole workspace. Build and scan the image in your trusted environment; the container profile limits access but does not protect against every container-runtime/kernel vulnerability. The wrapper uses the pinned CI dependency baseline for Python 3.11 inside the image. The helper only implements `extract`; publish output on the host explicitly if required.
