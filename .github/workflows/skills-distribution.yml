@@ -15,6 +15,12 @@ on:
   schedule:
     - cron: '23 6 * * 1'
   workflow_dispatch:
+    inputs:
+      request_indexing:
+        description: 'Request skills.sh indexing via one public GitHub installation (best effort; not guaranteed)'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -111,3 +117,19 @@ jobs:
                   raise SystemExit(f"Skill not installed correctly: {name}")
           print("Successfully installed:", ", ".join(sorted(installed)))
           PY
+      - name: Request skills.sh indexing (manual opt-in only)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.request_indexing == true && github.ref == 'refs/heads/main' }}
+        shell: bash
+        env:
+          DISABLE_TELEMETRY: '0'
+          DO_NOT_TRACK: '0'
+          CI: 'false'
+        run: |
+          set -euo pipefail
+          target="$(mktemp -d)"
+          trap 'rm -rf "$target"' EXIT
+          cd "$target"
+          # Use the public remote repository instead of the checkout so the
+          # install event (if accepted by the CLI in Actions) has a source URL.
+          npx --yes skills@latest add simorex80/skills --skill '*' --agent github-copilot --yes --copy
+          echo "Indexing request attempted; skills.sh visibility is not guaranteed."
