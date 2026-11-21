@@ -10,7 +10,7 @@ from pathlib import PurePosixPath
 from typing import Protocol
 import subprocess
 import sys
-from urllib.parse import quote
+from urllib.parse import quote, unquote, urlsplit
 
 
 MAX_CHANGES = 100
@@ -230,6 +230,48 @@ def init_memory(host: str, repo: str, branch: str) -> dict:
     return {"status": "initialized", **commit(host, repo, branch, sha, "Initialize LLM Wiki", plan, bootstrap=True)}
 
 
+def _markdown_targets(markdown: str) -> list[str]:
+    """Find local inline and full/collapsed reference links (including images).
+
+    Not a full CommonMark parser; fenced and inline code are excluded to
+    avoid flagging ordinary example syntax as broken links.
+    """
+    markdown = re.sub(r"(?ms)^\s*```[^\n]*\n.*?^\s*```[^\n]*$", "", markdown)
+    markdown = re.sub(r"`[^`\n]*`", "", markdown)
+    definitions = {}
+    for label, target in re.findall(
+        r"(?m)^\s{0,3}\[([^\]]+)\]:\s*(?:<([^>]+)>|(\S+))",
+        markdown,
+    ):
+        definitions[label.casefold().strip()] = target
+    targets = []
+    for target in re.findall(r"!?\[[^\]]+\]\((<[^>]+>|[^)]+)\)", markdown):
+        target = target.strip()
+        if target.startswith("<") and target.endswith(">"):
+            target = target[1:-1]
+        elif " \"" in target:
+            target = target.split(" \"", 1)[0]
+        targets.append(target)
+    for label, reference in re.findall(r"!?\[([^\]]+)\]\[([^\]]*)\]", markdown):
+        key = (reference or label).casefold().strip()
+        if key in definitions:
+            targets.append(definitions[key])
+    return targets
+
+
+def _heading_anchors(markdown: str) -> set[str]:
+    """Approximate GitHub Markdown heading slugs for ordinary headings."""
+    used: dict[str, int] = {}
+    anchors: set[str] = set()
+    for heading in re.findall(r"(?m)^#{1,6}\s+(.+?)\s*#*\s*$", markdown):
+        title = re.sub(r"\[[^\]]+\]\(([^)]+)\)", r"\1", heading)
+        slug = re.sub(r"[^\w\- ]", "", title.casefold()).replace(" ", "-")
+        index = used.get(slug, 0)
+        used[slug] = index + 1
+        anchors.add(slug if index == 0 else f"{slug}-{index}")
+    return anchors
+
+
 def lint_memory(host: str, repo: str, sha: str) -> dict:
     files = set(list_files(host, repo, sha))
     problems = []
@@ -237,32 +279,49 @@ def lint_memory(host: str, repo: str, sha: str) -> dict:
         if required not in files:
             problems.append({"kind": "missing_required_file", "path": required})
     markdown_files = sorted(p for p in files if p.startswith("wiki/") and p.endswith(".md"))
+    cache: dict[str, str] = {}
+
+    def page(path: str) -> str:
+        if path not in cache:
+            cache[path] = read_file(host, repo, sha, path)
+        return cache[path]
+
     for path in markdown_files:
-        content = read_file(host, repo, sha, path)
-        for target in re.findall(r"(?<!!)\[[^\]]+\]\(([^)]+)\)", content):
-            target = target.split("#", 1)[0].split("?", 1)[0]
-            if not target or "://" in target or target.startswith(("mailto:", "#")):
+        for original in _markdown_targets(page(path)):
+            target = original.strip()
+            parsed = urlsplit(target)
+            if parsed.scheme.lower() in {"http", "https", "mailto"} or target.startswith("//"):
                 continue
-            if target.startswith("/") or "\\" in target:
-                problems.append({"kind": "invalid_link", "path": path, "target": target})
+            if parsed.scheme or parsed.netloc:
+                problems.append({"kind": "invalid_link", "path": path, "target": original})
                 continue
-            base = PurePosixPath(path).parent
-            parts = []
+            link_path = unquote(parsed.path)
+            fragment = unquote(parsed.fragment)
+            if link_path.startswith("/") or "\\" in link_path:
+                problems.append({"kind": "invalid_link", "path": path, "target": original})
+                continue
+
+            parts: list[str] = []
             escaped_root = False
-            for item in (str(base) + "/" + target).split("/"):
-                if item == "..":
+            relative = (str(PurePosixPath(path).parent) + "/" + link_path
+                        if link_path else path)
+            for part in relative.split("/"):
+                if part == "..":
                     if not parts:
                         escaped_root = True
                         break
                     parts.pop()
-                elif item not in {"", "."}:
-                    parts.append(item)
+                elif part not in {"", "."}:
+                    parts.append(part)
             if escaped_root:
-                problems.append({"kind": "invalid_link", "path": path, "target": target})
+                problems.append({"kind": "invalid_link", "path": path, "target": original})
                 continue
             resolved = "/".join(parts)
             if resolved not in files:
-                problems.append({"kind": "broken_link", "path": path, "target": target})
+                problems.append({"kind": "broken_link", "path": path, "target": original})
+            elif fragment and resolved.lower().endswith(".md"):
+                if fragment.casefold() not in _heading_anchors(page(resolved)):
+                    problems.append({"kind": "broken_anchor", "path": path, "target": original})
     return {"sha": sha, "files_checked": len(markdown_files), "issues": problems,
             "semantic_review_required": True}
 
