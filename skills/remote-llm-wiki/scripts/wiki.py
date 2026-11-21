@@ -172,14 +172,24 @@ def list_files(host: str, repo: str, sha: str) -> list[str]:
 def validate_plan(plan: object, existing: set[str], *, bootstrap: bool = False) -> None:
     if not isinstance(plan, dict):
         raise WikiError("Expected a JSON change plan.")
+    if set(plan) - {"upsert", "delete"}:
+        raise WikiError("Unknown fields in change plan.")
     changed = plan.get("upsert", {})
     deleted = plan.get("delete", [])
+    if not changed and not deleted:
+        raise WikiError("Provide at least one file change.")
+    if not all(isinstance(path, str) for path in deleted):
+        raise WikiError("Every deletion must name a path.")
+    if len(deleted) != len(set(deleted)) or set(deleted).intersection(changed):
+        raise WikiError("Duplicate or conflicting paths in change plan.")
     if not isinstance(changed, dict) or not isinstance(deleted, list):
         raise WikiError("Invalid change plan.")
     if len(changed) + len(deleted) > MAX_CHANGES:
         raise WikiError("Too many changes in one commit.")
     total = 0
     for path, content in changed.items():
+        if not isinstance(path, str):
+            raise WikiError("Every addition must name a path.")
         if bootstrap and path in DEFAULT_FILES:
             pass
         else:
@@ -204,6 +214,13 @@ def init_memory(host: str, repo: str, branch: str) -> dict:
     sha = snapshot(host, repo, branch)
     existing = set(list_files(host, repo, sha))
     if set(DEFAULT_FILES).issubset(existing):
+        # Presence alone is insufficient: refuse a corrupted or incompatible manifest.
+        manifest = read_file(host, repo, sha, "memory.yaml")
+        if manifest != DEFAULT_FILES["memory.yaml"]:
+            raise WikiError("Existing memory.yaml differs from the supported V2 schema.")
+        for required in ("AGENTS.md", "wiki/index.md", "wiki/log.md"):
+            if not read_file(host, repo, sha, required).strip():
+                raise WikiError(f"Required memory file is empty: {required}")
         return {"status": "already_initialized", "sha": sha}
     if existing.intersection(DEFAULT_FILES) or any(
         name.startswith(("wiki/", "raw/")) for name in existing
@@ -231,13 +248,18 @@ def lint_memory(host: str, repo: str, sha: str) -> dict:
                 continue
             base = PurePosixPath(path).parent
             parts = []
+            escaped_root = False
             for item in (str(base) + "/" + target).split("/"):
                 if item == "..":
                     if not parts:
+                        escaped_root = True
                         break
                     parts.pop()
                 elif item not in {"", "."}:
                     parts.append(item)
+            if escaped_root:
+                problems.append({"kind": "invalid_link", "path": path, "target": target})
+                continue
             resolved = "/".join(parts)
             if resolved not in files:
                 problems.append({"kind": "broken_link", "path": path, "target": target})
