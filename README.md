@@ -11,13 +11,31 @@ Reusable skills for GitHub Copilot CLI. Each skill provides instructions to the 
 
 ## Install
 
-In GitHub Copilot CLI:
+Choose **one** installation method for a given Copilot environment; installing the same skills using both methods may produce duplicates.
+
+### Agent Skills CLI (skills.sh ecosystem)
+
+List the available skills before installation:
+
+```sh
+npx skills add simorex80/skills --list
+```
+
+Install both skills for GitHub Copilot (project scope):
+
+```sh
+npx skills add simorex80/skills --agent github-copilot
+```
+
+For other supported agents, select the corresponding `--agent` value. Check the [skills CLI documentation](https://www.skills.sh/docs/cli) for supported agents and global installation.
+
+### GitHub Copilot CLI plugin
 
 ```sh
 copilot plugin install simorex80/skills
 ```
 
-Start a new Copilot CLI session, then verify discovery using `/skills info remote-llm-wiki` or `/skills info markitdown`. An existing installation can be refreshed with `copilot plugin update simorex-skills`; reload skills or restart the session afterward.
+Start a new Copilot CLI session and verify discovery with `/skills info remote-llm-wiki` or `/skills info markitdown`. Refresh an existing plugin with `copilot plugin update simorex-skills`; reload skills or restart the session afterward.
 
 See the [getting-started guide](docs/getting-started.md) for prerequisites and a quick first task.
 
