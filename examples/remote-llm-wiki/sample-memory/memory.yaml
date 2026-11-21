@@ -1,0 +1,8 @@
+version: 2
+format: llm-wiki
+paths:
+  schema: AGENTS.md
+  index: wiki/index.md
+  pages: wiki/
+  sources: raw/
+  log: wiki/log.md
