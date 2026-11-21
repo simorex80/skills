@@ -13,7 +13,7 @@ npx skills add simorex80/skills --list
 npx skills add simorex80/skills --agent github-copilot
 ```
 
-You can target another supported agent using its `--agent` identifier. See the [skills CLI guide](https://www.skills.sh/docs/cli) for installation scope and updates.
+You can target another supported agent using its `--agent` identifier. See the [skills CLI guide](https://github.com/vercel-labs/skills/blob/main/docs/commands.md) for installation scope and updates.
 
 **GitHub Copilot CLI plugin:**
 
