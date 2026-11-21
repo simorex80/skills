@@ -21,7 +21,7 @@ Open a new Copilot CLI session and run `/skills info markitdown` to verify that 
 
 ## Use MarkItDown (V2)
 
-Install Microsoft MarkItDown in the Python environment used to invoke the skill script (a dedicated virtual environment is recommended). Python 3.10 through 3.14 is supported by the upstream package. For example:
+Install Microsoft MarkItDown in the Python environment used to invoke the skill script (a dedicated virtual environment is recommended). The skill requires Python 3.10 or newer. The current Microsoft MarkItDown release (0.1.9) independently declares support for Python 3.10–3.14 and excludes Python 3.15 in its package metadata; this is an upstream dependency constraint, not a restriction imposed by this skill. For example:
 
 ```sh
 python -m pip install 'markitdown[pdf,docx,pptx,xlsx]'
@@ -48,7 +48,7 @@ Run MarkItDown V2 offline unit tests:
 python -m unittest discover -s skills/markitdown/tests -v
 ```
 
-The GitHub Actions workflow tests Python 3.10–3.14 against the newest MarkItDown release resolvable for each interpreter and exercises real PDF, DOCX, PPTX, XLSX and HTML fixtures. An upstream release may introduce breaking API changes; CI should expose those without constraining installations to a fixed release.
+The GitHub Actions workflow tests MarkItDown on Python 3.10–3.14 (the currently installable upstream range) and Remote LLM Wiki on Python 3.10–3.15, exercising real PDF, DOCX, PPTX, XLSX and HTML fixtures. An upstream release may introduce breaking API changes; CI should expose those without constraining installations to a fixed release.
 
 ## Use Remote LLM Wiki (V2)
 
