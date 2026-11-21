@@ -9,7 +9,7 @@ Use this skill whenever document content is needed for a task such as reading, c
 
 ## Requirements
 
-- Python 3.10 through 3.14 and the official Microsoft `markitdown` package installed **in the same interpreter** used to run this skill. Recommended: use an isolated Python environment and install `markitdown[pdf,docx,pptx,xlsx]` from your organization's managed package repository or a trusted package index. No exact MarkItDown version is required; verify that the installed Python API is compatible when upgrading. Do not install packages automatically.
+- Python 3.10+ and the official Microsoft `markitdown` package installed **in the same interpreter** used to run this skill. Recommended: use an isolated Python environment and install `markitdown[pdf,docx,pptx,xlsx]` from your organization's managed package repository or a trusted package index. No exact MarkItDown version is required. The upstream MarkItDown 0.1.9 package currently excludes Python 3.15; installation compatibility depends on its published metadata. Verify the installed Python API when upgrading. Do not install packages automatically.
 - Local source files must reside in the current workspace. Supported extensions: `.pdf`, `.docx`, `.pptx`, `.xlsx`, `.html`, `.htm`, `.csv`, `.json`, `.xml`, `.txt`. Additional MarkItDown formats are intentionally not enabled by this wrapper.
 - Resolve `SCRIPT` to the absolute path of `scripts/convert.py`. Execute from the workspace root; quote paths as literal shell arguments.
 
