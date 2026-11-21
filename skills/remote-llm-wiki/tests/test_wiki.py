@@ -96,6 +96,20 @@ class WikiV2Tests(unittest.TestCase):
             json.loads('{"upsert":{},"upsert":{}}',
                        object_pairs_hook=wiki.unique_plan_keys)
 
+    def test_graphql_branch_name_payload(self):
+        sha = "a" * 40
+        response = {"data": {"createCommitOnBranch": {"commit": {
+            "oid": "b" * 40, "url": "https://github.com/example/commit"
+        }}}}
+        with patch.object(wiki, "list_files", return_value=[]), \
+             patch.object(wiki, "snapshot", return_value=sha), \
+             patch.object(wiki, "gh_api", return_value=json.dumps(response)) as api:
+            wiki.commit("github.com", "org/memory", "main", sha,
+                        "Test commit", {"upsert": {"wiki/test.md": "# Test"}})
+        branch = api.call_args.args[2]["variables"]["input"]["branch"]
+        self.assertEqual(branch, {"repositoryNameWithOwner": "org/memory",
+                                  "branchName": "main"})
+
     def test_markdown_link_lint(self):
         files = {"wiki/index.md", "wiki/a.md", *wiki.DEFAULT_FILES.keys()}
         with patch.object(wiki, "list_files", return_value=list(files)), \
