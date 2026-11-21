@@ -66,10 +66,10 @@ def main() -> None:
         log = wiki_call(repo, "read", original, "wiki/log.md")
         plan = {
             "upsert": {
-                f"raw/{branch}.md": "# Synthetic test source\\n\\nNo production data.\\n",
-                f"wiki/{branch}.md": f"# Test\\n\\n[Source](../raw/{branch}.md)\\n",
-                "wiki/index.md": index + f"\\n- [CI test]({branch}.md)\\n",
-                "wiki/log.md": log + f"\\n- Synthetic run {run_id}.\\n",
+                f"raw/{branch}.md": "# Synthetic test source\n\nNo production data.\n",
+                f"wiki/{branch}.md": f"# Test\n\n[Source](../raw/{branch}.md)\n",
+                "wiki/index.md": index + f"\n- [CI test]({branch}.md)\n",
+                "wiki/log.md": log + f"\n- Synthetic run {run_id}.\n",
             }
         }
         outcome = json.loads(wiki_call(
