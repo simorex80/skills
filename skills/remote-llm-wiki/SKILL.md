@@ -14,13 +14,13 @@ Resolve `SCRIPT` to the absolute path of the bundled [scripts/wiki.py](scripts/w
 ## Read
 
 1. Run `python "$SCRIPT" --host "$HOST" --repo "$REPO" snapshot "$BRANCH"` and retain the returned commit SHA.
-2. Run `python "$SCRIPT" --host "$HOST" --repo "$REPO" read "$SHA" wiki/index.md`. Read only relevant linked pages using the same SHA. Resolve relative Markdown links from the containing page. Resolve wiki links using the index and surface ambiguity if multiple pages have the same name. The helper also reads UTF-8 material under `raw/` and a root `log.md`. Report unavailable pages or sources without inventing their contents.
+2. Run `python "$SCRIPT" --host "$HOST" --repo "$REPO" read "$SHA" wiki/index.md`. Read only relevant linked pages using the same SHA. Resolve relative Markdown links from the containing page. Resolve wiki links using the index and surface ambiguity if multiple pages have the same name. The helper reads only regular UTF-8 files, including material under `raw/` and a root `log.md`. Report unavailable pages or sources without inventing their contents.
 3. Cite relevant wiki pages or sources with permanent links at the resolved SHA, using `https://HOST/OWNER/REPO/blob/SHA/PATH` with the appropriate URL encoding. Keep queries read-only.
 
 ## Write to the configured branch
 
 1. For a requested change, work from a single snapshot. Read existing pages, the index and the existing log as needed. Keep source captures under `raw/` unchanged. Preserve unrelated text, and check source links and cross-references. Update the index and append to the existing log when appropriate. If neither log location exists and a log entry is needed, use `wiki/log.md`.
-2. Prepare a JSON plan with `upsert` mapping each changed path to its complete UTF-8 Markdown text and optional `delete` listing explicitly requested page removals. Omit unchanged files. Keep the plan in a temporary file or pass it on standard input. For example:
+2. Prepare a JSON plan with `upsert` mapping each changed path to its complete UTF-8 Markdown text and optional `delete` listing explicitly requested page removals. Include each changed path once and omit unchanged files. Keep the plan in a temporary file or pass it on standard input. For example:
 
    ```json
    {"upsert":{"wiki/example.md":"# Example\n"}}
