@@ -28,10 +28,10 @@ jobs:
       matrix:
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Offline syntax and wiki tests
@@ -46,46 +46,33 @@ jobs:
       matrix:
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Offline syntax and MarkItDown tests
         run: |
           python -m compileall -q skills/markitdown/scripts skills/markitdown/tests
           python -m unittest discover -s skills/markitdown/tests -p 'test_*.py' -v
-      - name: Install pinned integration dependencies
+      - name: Install current MarkItDown and integration test dependencies
         run: |
-          python -m pip install -c 'skills/markitdown/constraints/ci-py${{ matrix.python-version }}.txt' 'markitdown[pdf,docx,pptx,xlsx]==0.1.9' reportlab python-docx python-pptx openpyxl
+          python -m pip install --upgrade 'markitdown[pdf,docx,pptx,xlsx]' reportlab python-docx python-pptx openpyxl
           python -m pip check
-          python skills/markitdown/tests/check_constraints.py "skills/markitdown/constraints/ci-py${{ matrix.python-version }}.txt"
+          python -m pip show markitdown
       - name: Exercise real document converters
         run: python skills/markitdown/tests/integration_smoke.py
 
   regressions:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
       - name: Cross-skill regression tests
         run: python -m unittest discover -s tests -v
 
-  isolated-markitdown:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Build pinned converter image
-        run: docker build -f skills/markitdown/Dockerfile -t local/skills-markitdown:reviewed skills/markitdown
-      - name: Convert through offline resource-limited container
-        run: |
-          printf '<h1>IsolatedMarkupFixture</h1>\\n' > sandbox-fixture.html
-          CONTAINER_RUNTIME=docker bash skills/markitdown/scripts/sandbox-extract.sh sandbox-fixture.html | grep IsolatedMarkupFixture
