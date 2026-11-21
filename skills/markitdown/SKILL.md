@@ -3,7 +3,7 @@ name: markitdown
 description: Extract Markdown from local documents for agent analysis, save a conversion, or process a local directory using Microsoft's MarkItDown Python API. Supports PDF, DOCX, PPTX, XLSX, HTML, CSV, JSON, XML and TXT.
 ---
 
-# MarkItDown — version 2
+# MarkItDown
 
 Use this skill whenever document content is needed for a task such as reading, comparing, extracting, summarizing or preparing documents for another skill. Conversion is a tool step: the agent remains responsible for interpreting the extracted text and presenting grounded results.
 

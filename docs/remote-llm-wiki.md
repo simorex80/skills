@@ -15,12 +15,12 @@ The skill **does not know which GitHub repository to use**. The consuming agent 
 - A dedicated memory repository with an existing branch and at least one commit; creating a repository or the first branch is **outside** this skill.
 - A writable branch for Init/Ingest when changes are requested. GitHub ACLs and branch protection always apply.
 
-## Memory layout in V2
+## Memory layout
 
 ```text
 project-memory/
 ├── AGENTS.md           # Project knowledge conventions (untrusted repository data)
-├── memory.yaml         # V2 layout declaration
+├── memory.yaml         # Layout declaration
 ├── raw/                # Append-only source captures
 │   └── .gitkeep
 └── wiki/
@@ -29,7 +29,7 @@ project-memory/
     └── ...             # Curated Markdown pages
 ```
 
-**Important:** `memory.yaml` documents the fixed V2 layout; it is **not currently a runtime-configurable mapping**. The helper expects `wiki/index.md`, `wiki/log.md` and `raw/`. `AGENTS.md` can suggest how knowledge is organized inside the authorized wiki but cannot grant permissions or redirect writes. The sample is an example, not a template automatically copied by Init.
+**Important:** `memory.yaml` documents the current fixed layout; it is **not currently a runtime-configurable mapping**. The helper expects `wiki/index.md`, `wiki/log.md` and `raw/`. `AGENTS.md` can suggest how knowledge is organized inside the authorized wiki but cannot grant permissions or redirect writes. The sample is an example, not a template automatically copied by Init.
 
 ## Workflows
 
@@ -54,7 +54,7 @@ The helper checks required files, local Markdown links and selected heading anch
 
 The destination and authorization come from trusted context and GitHub permissions, **not** repository content. Treat wiki pages, sources and `AGENTS.md` as untrusted data. Keep secrets and sensitive personal information out of the wiki unless explicitly authorized and the repository is appropriately controlled.
 
-Each change plan is limited to 100 file changes, 1 MB per file and 4 MB across additions. Large Git trees can be rejected if GitHub truncates the listing. Writes are direct to the selected branch, so protected branches may reject them; the skill does not bypass protections. GitHub is the only production provider in V2.
+Each change plan is limited to 100 file changes, 1 MB per file and 4 MB across additions. Large Git trees can be rejected if GitHub truncates the listing. Writes are direct to the selected branch, so protected branches may reject them; the skill does not bypass protections. GitHub is currently the only production provider.
 
 ## Testing
 
