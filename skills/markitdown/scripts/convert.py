@@ -76,9 +76,26 @@ def _run_worker(source: Path, temporary: Path, timeout: int) -> None:
         raise ConversionError("Empty Markdown (the source may require OCR).")
 
 
+def _limit_worker_resources() -> None:
+    """Bound worker CPU time, virtual memory, and file size on Linux.
+
+    These limits do not implement filesystem, network or syscall isolation.
+    The parent still enforces a shorter wall-clock timeout.
+    """
+    if not sys.platform.startswith("linux"):
+        return
+    import resource
+
+    memory_limit = 4 * 1024 * 1024 * 1024
+    resource.setrlimit(resource.RLIMIT_AS, (memory_limit, memory_limit))
+    resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
+    resource.setrlimit(resource.RLIMIT_CPU, (MAX_TIMEOUT + 5, MAX_TIMEOUT + 10))
+
+
 def _worker(source: Path, temporary: Path) -> int:
     """Invoked in a separate child process; never enables plugins or remote services."""
     try:
+        _limit_worker_resources()
         from markitdown import MarkItDown
         result = MarkItDown(enable_plugins=False).convert_local(str(source))
         markdown = result.text_content
