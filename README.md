@@ -21,10 +21,10 @@ Open a new Copilot CLI session and run `/skills info markitdown` to verify that 
 
 ## Use MarkItDown (V2)
 
-Install Microsoft MarkItDown in the same Python interpreter that runs Copilot CLI. For example:
+Install Microsoft MarkItDown in the Python environment used to invoke the skill script (a dedicated virtual environment is recommended). Python 3.10 through 3.14 is supported by the upstream package. For example:
 
 ```sh
-python -m pip install 'markitdown[pdf,docx,pptx,xlsx]==0.1.9'
+python -m pip install 'markitdown[pdf,docx,pptx,xlsx]>=0.1.9,<0.2.0'
 ```
 
 The skill uses the official Python API, with plugins disabled. Three operations are available:
@@ -48,7 +48,7 @@ Run MarkItDown V2 offline unit tests:
 python -m unittest discover -s skills/markitdown/tests -v
 ```
 
-The GitHub Actions workflow also runs a real HTML conversion smoke test with the pinned Microsoft converter.
+The GitHub Actions workflow tests Python 3.10–3.14, with the pinned Microsoft MarkItDown 0.1.9 baseline, and exercises real PDF, DOCX, PPTX, XLSX and HTML fixtures. Runtime installation permits compatible 0.1.x releases; newer releases must be validated before being adopted as the CI baseline.
 
 ## Use Remote LLM Wiki (V2)
 
