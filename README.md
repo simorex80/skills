@@ -27,7 +27,7 @@ Install both skills for GitHub Copilot (project scope):
 npx skills add simorex80/skills --agent github-copilot
 ```
 
-For other supported agents, select the corresponding `--agent` value. Check the [skills CLI documentation](https://www.skills.sh/docs/cli) for supported agents and global installation.
+For other supported agents, select the corresponding `--agent` value. Check the [skills CLI documentation](https://github.com/vercel-labs/skills/blob/main/docs/commands.md) for supported agents and global installation.
 
 ### GitHub Copilot CLI plugin
 
