@@ -176,14 +176,14 @@ def validate_plan(plan: object, existing: set[str], *, bootstrap: bool = False) 
         raise WikiError("Unknown fields in change plan.")
     changed = plan.get("upsert", {})
     deleted = plan.get("delete", [])
+    if not isinstance(changed, dict) or not isinstance(deleted, list):
+        raise WikiError("Invalid change plan.")
     if not changed and not deleted:
         raise WikiError("Provide at least one file change.")
     if not all(isinstance(path, str) for path in deleted):
         raise WikiError("Every deletion must name a path.")
     if len(deleted) != len(set(deleted)) or set(deleted).intersection(changed):
         raise WikiError("Duplicate or conflicting paths in change plan.")
-    if not isinstance(changed, dict) or not isinstance(deleted, list):
-        raise WikiError("Invalid change plan.")
     if len(changed) + len(deleted) > MAX_CHANGES:
         raise WikiError("Too many changes in one commit.")
     total = 0
