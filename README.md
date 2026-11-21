@@ -21,7 +21,7 @@ Open a new Copilot CLI session and run `/skills info markitdown` to verify that 
 
 ## Use MarkItDown
 
-Install the converter in the same environment where Copilot CLI runs, with [pipx](https://pipx.pypa.io/stable/):
+Use Python 3.10+ and install the converter in the same environment where Copilot CLI runs, with [pipx](https://pipx.pypa.io/stable/):
 
 ```sh
 pipx install "markitdown[pdf,docx,pptx,xlsx]"
@@ -32,7 +32,7 @@ Place a text-based PDF named `manual.pdf` in the working directory, then ask Cop
 
 > Use the /markitdown skill to convert manual.pdf to manual.md.
 
-Open `manual.md` and check that the extracted text and headings are present. If the destination already exists, provide a different filename. Image-only scans may need OCR, which this skill leaves disabled.
+Open `manual.md` and check that the extracted text and headings are present. If the destination already exists, provide a different filename. The destination filesystem must support hard links so the helper can publish the Markdown without overwriting an existing file. Image-only scans may need OCR, which this skill leaves disabled.
 
 ## Use Remote LLM Wiki
 
