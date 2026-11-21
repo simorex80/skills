@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "simorex-skills",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A collection of agent skills for GitHub Copilot CLI.",
   "repository": "https://github.com/simorex80/skills"
 }
