@@ -120,10 +120,6 @@ jobs:
       - name: Request skills.sh indexing (manual opt-in only)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.request_indexing == true && github.ref == 'refs/heads/main' }}
         shell: bash
-        env:
-          DISABLE_TELEMETRY: '0'
-          DO_NOT_TRACK: '0'
-          CI: 'false'
         run: |
           set -euo pipefail
           target="$(mktemp -d)"
@@ -131,5 +127,5 @@ jobs:
           cd "$target"
           # Use the public remote repository instead of the checkout so the
           # install event (if accepted by the CLI in Actions) has a source URL.
-          npx --yes skills@latest add simorex80/skills --skill '*' --agent github-copilot --yes --copy
+          env -u DISABLE_TELEMETRY -u DO_NOT_TRACK -u CI npx --yes skills@latest add simorex80/skills --skill '*' --agent github-copilot --yes --copy
           echo "Indexing request attempted; skills.sh visibility is not guaranteed."
