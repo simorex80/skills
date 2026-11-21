@@ -124,11 +124,11 @@ class WikiV2Tests(unittest.TestCase):
         files = set(wiki.DEFAULT_FILES) | {"wiki/my doc.md", "wiki/other.md"}
         pages = {
             "wiki/index.md": (
-                "[Encoded](my%20doc.md#some-heading)\\n"
-                "[Reference][other]\\n\\n[other]: other.md\\n"
+                "[Encoded](my%20doc.md#some-heading)\n"
+                "[Reference][other]\n\n[other]: other.md\n"
             ),
-            "wiki/my doc.md": "# Some Heading\\n",
-            "wiki/other.md": "# Other\\n",
+            "wiki/my doc.md": "# Some Heading\n",
+            "wiki/other.md": "# Other\n",
         }
         with patch.object(wiki, "list_files", return_value=list(files)), \
              patch.object(wiki, "read_file",
@@ -139,7 +139,7 @@ class WikiV2Tests(unittest.TestCase):
     def test_lint_invalid_scheme_and_missing_anchor(self):
         files = set(wiki.DEFAULT_FILES)
         pages = {
-            "wiki/index.md": "[Bad](javascript:alert) [Anchor](#missing)\\n",
+            "wiki/index.md": "[Bad](javascript:alert) [Anchor](#missing)\n",
         }
         with patch.object(wiki, "list_files", return_value=list(files)), \
              patch.object(wiki, "read_file",
