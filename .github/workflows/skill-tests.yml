@@ -75,3 +75,17 @@ jobs:
           python-version: '3.11'
       - name: Cross-skill regression tests
         run: python -m unittest discover -s tests -v
+
+  isolated-markitdown:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build pinned converter image
+        run: docker build -f skills/markitdown/Dockerfile -t local/skills-markitdown:reviewed skills/markitdown
+      - name: Convert through offline resource-limited container
+        run: |
+          printf '<h1>IsolatedMarkupFixture</h1>\\n' > sandbox-fixture.html
+          CONTAINER_RUNTIME=docker bash skills/markitdown/scripts/sandbox-extract.sh sandbox-fixture.html | grep IsolatedMarkupFixture
