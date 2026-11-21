@@ -20,7 +20,7 @@ Supported extensions in this wrapper: `.pdf`, `.docx`, `.pptx`, `.xlsx`, `.html`
 
 ## Three operations
 
-**Extract:** use for analysis; prints Markdown to standard output without writing a persistent file.
+**Extract:** use for analysis; prints Markdown to standard output without leaving a persistent file. The helper creates and removes a temporary Markdown file during conversion.
 
 ```sh
 python skills/markitdown/scripts/convert.py extract report.pdf
@@ -38,7 +38,7 @@ python skills/markitdown/scripts/convert.py convert report.pdf --output report.m
 python skills/markitdown/scripts/convert.py batch documents --output-dir converted --recursive
 ```
 
-The consuming agent normally selects the operation in response to a natural-language prompt. See [examples](../examples/markitdown/prompts.md).
+You can ask Copilot to perform document tasks in natural language. It may select this skill automatically when relevant, but discovery and selection are not guaranteed; explicitly say “use markitdown” if you need this converter. The agent then chooses the appropriate operation. See [copyable prompts](../examples/markitdown/prompts.md), including PDF summarization, Word comparison, Excel overview, directory conversion and composition with Remote LLM Wiki.
 
 ## Safety and limitations
 
@@ -52,4 +52,4 @@ MarkItDown runs with the agent's OS privileges. The worker's Linux resource limi
 python -m unittest discover -s skills/markitdown/tests -v
 ```
 
-CI also runs converter smoke tests on representative PDF, DOCX, PPTX, XLSX and HTML fixtures. See [the workflow](../.github/workflows/skill-tests.yml).
+These are offline unit tests, using mocks rather than the installed Microsoft converter. CI separately installs MarkItDown and runs real converter smoke tests on representative PDF, DOCX, PPTX, XLSX and HTML fixtures. See [the workflow](../.github/workflows/skill-tests.yml).
