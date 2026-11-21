@@ -106,15 +106,15 @@ class WikiV2Tests(unittest.TestCase):
 
     def test_init_rejects_incompatible_manifest(self):
         existing = list(wiki.DEFAULT_FILES)
-        with patch.object(wiki, "snapshot", return_value="a" * 40), \\
-             patch.object(wiki, "list_files", return_value=existing), \\
+        with patch.object(wiki, "snapshot", return_value="a" * 40), \
+             patch.object(wiki, "list_files", return_value=existing), \
              patch.object(wiki, "read_file", return_value="version: 999"):
             with self.assertRaisesRegex(wiki.WikiError, "schema"):
                 wiki.init_memory("github.com", "org/repo", "main")
 
     def test_lint_rejects_links_escaping_repository(self):
         files = set(wiki.DEFAULT_FILES)
-        with patch.object(wiki, "list_files", return_value=list(files)), \\
+        with patch.object(wiki, "list_files", return_value=list(files)), \
              patch.object(wiki, "read_file", side_effect=lambda h, r, sha, path:
                               "[escape](../../secret.md)" if path == "wiki/index.md" else ""):
             result = wiki.lint_memory("github.com", "o/r", "a" * 40)
