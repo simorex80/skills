@@ -297,7 +297,7 @@ def commit(host: str, repo: str, branch: str, sha: str, message: str, plan: obje
         "query": COMMIT_QUERY,
         "variables": {
             "input": {
-                "branch": {"repositoryNameWithOwner": repo, "refName": f"refs/heads/{branch}"},
+                "branch": {"repositoryNameWithOwner": repo, "branchName": branch},
                 "expectedHeadOid": sha,
                 "message": {"headline": message},
                 "fileChanges": changes,
