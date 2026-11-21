@@ -37,7 +37,7 @@ python -m unittest discover -s skills/markitdown/tests -v
 python -m unittest discover -s tests -v
 ```
 
-MarkItDown tests that import its Python API require the package and supported dependencies to be installed. [GitHub Actions](.github/workflows/skill-tests.yml) validates both skills across supported Python versions and runs converter integration smoke tests.
+The unit and regression tests run without GitHub credentials or an installed MarkItDown converter. [GitHub Actions](.github/workflows/skill-tests.yml) separately installs MarkItDown and document-generation dependencies to run real converter integration smoke tests across its supported Python versions.
 
 To contribute a new skill, create `skills/<name>/SKILL.md` with `name` and `description` YAML frontmatter, add its helper and tests as needed, and link it from this README. Keep behavioral rules in the skill and tutorials in `docs/` or `examples/`.
 
