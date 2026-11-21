@@ -54,7 +54,7 @@ def main() -> None:
         for source in (pdf, document, slides, spreadsheet, html):
             result = subprocess.run(
                 [sys.executable, str(CONVERTER), "extract", str(source)],
-                cwd=root, capture_output=True, text=True, timeout=90, check=False,
+                cwd=Path(tmp), capture_output=True, text=True, timeout=90, check=False,
             )
             if result.returncode != 0:
                 raise AssertionError(f"{source.suffix} conversion failed: {result.stderr}")
@@ -64,7 +64,7 @@ def main() -> None:
         # Test publication and batch against actual converter API, too.
         result = subprocess.run(
             [sys.executable, str(CONVERTER), "batch", str(root), "--output-dir", str(output_root)],
-            cwd=root, capture_output=True, text=True, timeout=240, check=False,
+            cwd=Path(tmp), capture_output=True, text=True, timeout=240, check=False,
         )
         if result.returncode != 0:
             raise AssertionError(f"Batch smoke test failed: {result.stderr}")
