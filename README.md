@@ -40,7 +40,7 @@ python skills/markitdown/scripts/convert.py convert document.pdf --output docume
 python skills/markitdown/scripts/convert.py batch documents --output-dir converted --recursive
 ```
 
-Supported local formats: PDF, DOCX, PPTX, XLSX, HTML, CSV, JSON, XML and TXT. Inputs must be inside the workspace. The wrapper limits document size (25 MiB), output size (4 MiB), and time (60 seconds by default). Batch operations process up to 100 files and return a JSON summary. URLs, network OCR and third-party plugins are not enabled. The wrapper is not an OS sandbox, so untrusted documents should be converted in an isolated environment.
+Supported local formats: PDF, DOCX, PPTX, XLSX, HTML, CSV, JSON, XML and TXT. Inputs must be inside the workspace. The wrapper limits document size (25 MiB), output size (4 MiB), and time (60 seconds by default). Batch operations process up to 100 files and return a JSON summary. URLs, network OCR and third-party plugins are not enabled. Linux workers additionally enforce CPU, memory and file-size limits. **This is not an OS or network sandbox**: untrusted documents require an externally managed isolated container or host with network denied and restricted filesystem access. Linux CI uses Python-version-specific pinned dependency constraints under `skills/markitdown/constraints/`; these are version snapshots, not hash-verified universal lockfiles.
 
 Run MarkItDown V2 offline unit tests:
 
@@ -74,7 +74,7 @@ Offline tests (no GitHub authentication required):
 python -m unittest discover -s skills/remote-llm-wiki/tests -v
 ```
 
-See [the skill instructions](skills/remote-llm-wiki/SKILL.md) for the exact procedures and limits.
+The dedicated [Remote LLM Wiki integration repository](https://github.com/simorex80/remote-llm-wiki-test) runs an authenticated end-to-end workflow against a disposable branch. The workflow pins a reviewed source commit; keep its ref aligned when verifying a new PR. No production wiki data is used.\n\nSee [the skill instructions](skills/remote-llm-wiki/SKILL.md) for the exact procedures and limits.
 
 ## Add a skill
 
