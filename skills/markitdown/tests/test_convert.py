@@ -151,6 +151,17 @@ class TestV2(unittest.TestCase):
         with self.assertRaisesRegex(converter.ConversionError, "nested"):
             converter.batch(self.workspace, "input", "input/output")
 
+    def test_batch_collision_rejected_before_publication(self):
+        folder = self.workspace / "input"
+        folder.mkdir()
+        (folder / "same.html").write_text("<h1>One</h1>", encoding="utf-8")
+        (folder / "same.txt").write_text("Two", encoding="utf-8")
+        with patch.object(converter, "_run_worker") as worker:
+            with self.assertRaisesRegex(converter.ConversionError, "collision"):
+                converter.batch(self.workspace, "input", "output")
+        worker.assert_not_called()
+        self.assertFalse((self.workspace / "output").exists())
+
     def test_timeout_validation(self):
         for invalid in ("0", "301", "non-number"):
             with self.assertRaises(Exception):

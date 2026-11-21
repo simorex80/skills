@@ -96,6 +96,60 @@ class WikiV2Tests(unittest.TestCase):
             json.loads('{"upsert":{},"upsert":{}}',
                        object_pairs_hook=wiki.unique_plan_keys)
 
+    def test_unknown_plan_fields_rejected(self):
+        with self.assertRaisesRegex(wiki.WikiError, "Unknown"):
+            wiki.validate_plan({"upsert": {"wiki/a.md": "test"}, "unexpected": 1}, set())
+
+    def test_duplicate_deletions_rejected(self):
+        with self.assertRaisesRegex(wiki.WikiError, "Duplicate"):
+            wiki.validate_plan({"delete": ["wiki/a.md", "wiki/a.md"]}, {"wiki/a.md"})
+
+    def test_init_rejects_incompatible_manifest(self):
+        existing = list(wiki.DEFAULT_FILES)
+        with patch.object(wiki, "snapshot", return_value="a" * 40), \
+             patch.object(wiki, "list_files", return_value=existing), \
+             patch.object(wiki, "read_file", return_value="version: 999"):
+            with self.assertRaisesRegex(wiki.WikiError, "schema"):
+                wiki.init_memory("github.com", "org/repo", "main")
+
+    def test_lint_rejects_links_escaping_repository(self):
+        files = set(wiki.DEFAULT_FILES)
+        with patch.object(wiki, "list_files", return_value=list(files)), \
+             patch.object(wiki, "read_file", side_effect=lambda h, r, sha, path:
+                              "[escape](../../secret.md)" if path == "wiki/index.md" else ""):
+            result = wiki.lint_memory("github.com", "o/r", "a" * 40)
+        self.assertEqual(result["issues"][0]["kind"], "invalid_link")
+
+    def test_lint_reference_encoded_path_and_anchor(self):
+        files = set(wiki.DEFAULT_FILES) | {"wiki/my doc.md", "wiki/other.md"}
+        pages = {
+            "wiki/index.md": (
+                "[Encoded](my%20doc.md#some-heading)\n"
+                "[Reference][other]\n\n[other]: other.md\n"
+            ),
+            "wiki/my doc.md": "# Some Heading\n",
+            "wiki/other.md": "# Other\n",
+        }
+        with patch.object(wiki, "list_files", return_value=list(files)), \
+             patch.object(wiki, "read_file",
+                          side_effect=lambda h, r, sha, p: pages.get(p, "")):
+            result = wiki.lint_memory("github.com", "o/r", "a" * 40)
+        self.assertEqual(result["issues"], [])
+
+    def test_lint_invalid_scheme_and_missing_anchor(self):
+        files = set(wiki.DEFAULT_FILES)
+        pages = {
+            "wiki/index.md": "[Bad](javascript:alert) [Anchor](#missing)\n",
+        }
+        with patch.object(wiki, "list_files", return_value=list(files)), \
+             patch.object(wiki, "read_file",
+                          side_effect=lambda h, r, sha, p: pages.get(p, "")):
+            result = wiki.lint_memory("github.com", "o/r", "a" * 40)
+        self.assertEqual(
+            [issue["kind"] for issue in result["issues"]],
+            ["invalid_link", "broken_anchor"],
+        )
+
     def test_graphql_branch_name_payload(self):
         sha = "a" * 40
         response = {"data": {"createCommitOnBranch": {"commit": {
