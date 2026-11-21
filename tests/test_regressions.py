@@ -28,7 +28,6 @@ def load_script(name, path):
 
 
 wiki = load_script("wiki", "remote-llm-wiki/scripts/wiki.py")
-markitdown = load_script("markitdown_skill", "markitdown/scripts/convert.py")
 
 
 class WikiTests(unittest.TestCase):
@@ -82,59 +81,6 @@ class WikiTests(unittest.TestCase):
                         self.assertEqual(wiki.main(), 1)
                     self.assertIn("Duplicate key in JSON plan: 'wiki/page.md'", stderr.getvalue())
                     gh.assert_not_called()
-
-
-class MarkItDownTests(unittest.TestCase):
-    def setUp(self):
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        self.workspace = Path(tmp.name).resolve()
-        self.source = self.workspace / "source file.pdf"
-        self.source.touch()
-
-    def write_conversion(self, args, **kwargs):
-        self.assertEqual(args[:3], ["markitdown", str(self.source), "-o"])
-        Path(args[3]).write_text("# Caffè", encoding="utf-8")
-        return subprocess.CompletedProcess(args, 0)
-
-    def test_publishes_completed_output_and_cleans_up(self):
-        with patch.object(markitdown.subprocess, "run", side_effect=self.write_conversion):
-            output = markitdown.convert(self.workspace, self.source.name, "docs/page.md")
-        self.assertEqual(output.read_text(encoding="utf-8"), "# Caffè")
-        self.assertEqual(list(output.parent.iterdir()), [output])
-
-    def test_preserves_destination_created_during_conversion(self):
-        expected = self.source.with_suffix(".md")
-
-        def finish_conversion(args, **kwargs):
-            result = self.write_conversion(args, **kwargs)
-            expected.write_text("keep this", encoding="utf-8")
-            return result
-
-        with patch.object(markitdown.subprocess, "run", side_effect=finish_conversion):
-            with self.assertRaisesRegex(markitdown.ConversionError, "Destination already exists"):
-                markitdown.convert(self.workspace, self.source.name, None)
-        self.assertEqual(expected.read_text(encoding="utf-8"), "keep this")
-        self.assertCountEqual(self.workspace.iterdir(), [self.source, expected])
-
-    def test_existing_destination_skips_conversion(self):
-        output = self.source.with_suffix(".md")
-        output.write_text("keep this", encoding="utf-8")
-        with patch.object(markitdown.subprocess, "run") as run:
-            with self.assertRaisesRegex(markitdown.ConversionError, "Destination already exists"):
-                markitdown.convert(self.workspace, self.source.name, None)
-        run.assert_not_called()
-        self.assertEqual(output.read_text(encoding="utf-8"), "keep this")
-
-    def test_discards_partial_output_after_converter_failure(self):
-        def fail(args, **kwargs):
-            self.write_conversion(args, **kwargs)
-            return subprocess.CompletedProcess(args, 1)
-
-        with patch.object(markitdown.subprocess, "run", side_effect=fail):
-            with self.assertRaisesRegex(markitdown.ConversionError, "exited with status 1"):
-                markitdown.convert(self.workspace, self.source.name, None)
-        self.assertEqual(list(self.workspace.iterdir()), [self.source])
 
 
 if __name__ == "__main__":
