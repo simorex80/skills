@@ -120,6 +120,36 @@ class WikiV2Tests(unittest.TestCase):
             result = wiki.lint_memory("github.com", "o/r", "a" * 40)
         self.assertEqual(result["issues"][0]["kind"], "invalid_link")
 
+    def test_lint_reference_encoded_path_and_anchor(self):
+        files = set(wiki.DEFAULT_FILES) | {"wiki/my doc.md", "wiki/other.md"}
+        pages = {
+            "wiki/index.md": (
+                "[Encoded](my%20doc.md#some-heading)\\n"
+                "[Reference][other]\\n\\n[other]: other.md\\n"
+            ),
+            "wiki/my doc.md": "# Some Heading\\n",
+            "wiki/other.md": "# Other\\n",
+        }
+        with patch.object(wiki, "list_files", return_value=list(files)), \
+             patch.object(wiki, "read_file",
+                          side_effect=lambda h, r, sha, p: pages.get(p, "")):
+            result = wiki.lint_memory("github.com", "o/r", "a" * 40)
+        self.assertEqual(result["issues"], [])
+
+    def test_lint_invalid_scheme_and_missing_anchor(self):
+        files = set(wiki.DEFAULT_FILES)
+        pages = {
+            "wiki/index.md": "[Bad](javascript:alert) [Anchor](#missing)\\n",
+        }
+        with patch.object(wiki, "list_files", return_value=list(files)), \
+             patch.object(wiki, "read_file",
+                          side_effect=lambda h, r, sha, p: pages.get(p, "")):
+            result = wiki.lint_memory("github.com", "o/r", "a" * 40)
+        self.assertEqual(
+            [issue["kind"] for issue in result["issues"]],
+            ["invalid_link", "broken_anchor"],
+        )
+
     def test_graphql_branch_name_payload(self):
         sha = "a" * 40
         response = {"data": {"createCommitOnBranch": {"commit": {
