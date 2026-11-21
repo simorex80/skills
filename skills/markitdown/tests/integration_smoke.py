@@ -23,11 +23,11 @@ MARKER = "SkillIntegrationFixture2026"
 def main() -> None:
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
-        pdf = root / "sample.pdf"
-        document = root / "sample.docx"
-        slides = root / "sample.pptx"
-        spreadsheet = root / "sample.xlsx"
-        html = root / "sample.html"
+        pdf = root / "sample-pdf.pdf"
+        document = root / "sample-docx.docx"
+        slides = root / "sample-pptx.pptx"
+        spreadsheet = root / "sample-xlsx.xlsx"
+        html = root / "sample-html.html"
 
         page = canvas.Canvas(str(pdf))
         page.drawString(70, 750, MARKER)
