@@ -1,0 +1,113 @@
+name: Skill distribution
+
+on:
+  pull_request:
+    paths:
+      - 'skills/**'
+      - 'plugin.json'
+      - '.github/workflows/skills-distribution.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'skills/**'
+      - 'plugin.json'
+      - '.github/workflows/skills-distribution.yml'
+  schedule:
+    - cron: '23 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  distribution:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DISABLE_TELEMETRY: '1'
+      DO_NOT_TRACK: '1'
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Verify plugin manifest and dynamically discover skills
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          plugin = json.loads(Path("plugin.json").read_text(encoding="utf-8"))
+          if plugin.get("name") != "simorex-skills":
+              raise SystemExit("Unexpected plugin name")
+          if plugin.get("$schema") != "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json":
+              raise SystemExit("Unexpected plugin schema")
+          names = []
+          for directory in sorted(Path("skills").iterdir()):
+              if not directory.is_dir():
+                  continue
+              manifest = directory / "SKILL.md"
+              if not manifest.is_file():
+                  raise SystemExit(f"Missing SKILL.md in {directory}")
+              body = manifest.read_text(encoding="utf-8")
+              match = re.match(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|\Z)", body, re.S)
+              if not match:
+                  raise SystemExit(f"Invalid YAML frontmatter: {manifest}")
+              metadata = match.group(1)
+              if not re.search(rf"(?m)^name:\s*{re.escape(directory.name)}\s*$", metadata):
+                  raise SystemExit(f"Skill name mismatch: {manifest}")
+              if not re.search(r"(?m)^description:\s*\S+", metadata):
+                  raise SystemExit(f"Missing description: {manifest}")
+              names.append(directory.name)
+          if not names:
+              raise SystemExit("No skills found")
+          Path("/tmp/expected-skills.json").write_text(json.dumps(names), encoding="utf-8")
+          print("Discovered skills:", ", ".join(names))
+          PY
+      - name: Verify official skills CLI discovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes skills@latest add "$GITHUB_WORKSPACE" --list > /tmp/skills-discovery.log 2>&1 || {
+            cat /tmp/skills-discovery.log
+            exit 1
+          }
+          cat /tmp/skills-discovery.log
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          names = json.loads(Path("/tmp/expected-skills.json").read_text())
+          discovered = Path("/tmp/skills-discovery.log").read_text()
+          missing = [name for name in names if name not in discovered]
+          if missing:
+              raise SystemExit(f"CLI discovery missing skills: {missing}")
+          PY
+      - name: Install all discovered skills into disposable project
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$(mktemp -d)"
+          trap 'rm -rf "$target"' EXIT
+          cd "$target"
+          npx --yes skills@latest add "$GITHUB_WORKSPACE" --skill '*' --agent github-copilot --yes --copy
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          expected = set(json.loads(Path("/tmp/expected-skills.json").read_text()))
+          root = Path(".agents/skills")
+          installed = {p.name for p in root.iterdir() if p.is_dir()} if root.is_dir() else set()
+          if installed != expected:
+              raise SystemExit(f"Installed skill mismatch: expected={sorted(expected)}, actual={sorted(installed)}")
+          for name in expected:
+              source = Path(root, name, "SKILL.md")
+              if not source.is_file() or not source.read_text(encoding="utf-8").strip():
+                  raise SystemExit(f"Skill not installed correctly: {name}")
+          print("Successfully installed:", ", ".join(sorted(installed)))
+          PY
