@@ -239,11 +239,11 @@ def _markdown_targets(markdown: str) -> list[str]:
     markdown = re.sub(r"(?ms)^\s*```[^\n]*\n.*?^\s*```[^\n]*$", "", markdown)
     markdown = re.sub(r"`[^`\n]*`", "", markdown)
     definitions = {}
-    for label, target in re.findall(
+    for label, angled, plain in re.findall(
         r"(?m)^\s{0,3}\[([^\]]+)\]:\s*(?:<([^>]+)>|(\S+))",
         markdown,
     ):
-        definitions[label.casefold().strip()] = target
+        definitions[label.casefold().strip()] = angled or plain
     targets = []
     for target in re.findall(r"!?\[[^\]]+\]\((<[^>]+>|[^)]+)\)", markdown):
         target = target.strip()
