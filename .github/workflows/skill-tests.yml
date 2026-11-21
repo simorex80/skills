@@ -113,7 +113,7 @@ jobs:
           set -euo pipefail
           target="$(mktemp -d)"
           cd "$target"
-          npx --yes skills@latest add "$GITHUB_WORKSPACE" --skill remote-llm-wiki markitdown --agent github-copilot --yes --copy
+          npx --yes skills@latest add "$GITHUB_WORKSPACE" --skill '*' --agent github-copilot --yes --copy
           for skill in remote-llm-wiki markitdown; do
             test -s ".agents/skills/$skill/SKILL.md"
             test -d ".agents/skills/$skill/scripts"
