@@ -222,11 +222,11 @@ def lint_memory(host: str, repo: str, sha: str) -> dict:
     markdown_files = sorted(p for p in files if p.startswith("wiki/") and p.endswith(".md"))
     for path in markdown_files:
         content = read_file(host, repo, sha, path)
-        for target in re.findall(r"(?<!!)\\[[^\\]]+\\]\\(([^)]+)\\)", content):
+        for target in re.findall(r"(?<!!)\[[^\]]+\]\(([^)]+)\)", content):
             target = target.split("#", 1)[0].split("?", 1)[0]
             if not target or "://" in target or target.startswith(("mailto:", "#")):
                 continue
-            if target.startswith("/") or "\\\\" in target:
+            if target.startswith("/") or "\\" in target:
                 problems.append({"kind": "invalid_link", "path": path, "target": target})
                 continue
             base = PurePosixPath(path).parent
