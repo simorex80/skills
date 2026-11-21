@@ -313,6 +313,26 @@ def commit(host: str, repo: str, branch: str, sha: str, message: str, plan: obje
     return result
 
 
+class GitHubBackend:
+    """GitHub adapter bound to a trusted destination, using the client's gh login."""
+
+    def __init__(self, host: str, repo: str):
+        self.host = parse_host(host)
+        self.repo = parse_repo(repo)
+
+    def get_snapshot(self, branch: str) -> str:
+        return snapshot(self.host, self.repo, branch)
+
+    def list_files(self, sha: str) -> list[str]:
+        return list_files(self.host, self.repo, sha)
+
+    def read_file(self, sha: str, path: str) -> str:
+        return read_file(self.host, self.repo, sha, path)
+
+    def commit(self, branch: str, expected_sha: str, message: str, plan: object) -> dict:
+        return commit(self.host, self.repo, branch, expected_sha, message, plan)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", required=True, type=parse_host)
