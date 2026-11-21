@@ -99,8 +99,8 @@ jobs:
           for name in ('remote-llm-wiki', 'markitdown'):
               path = Path('skills') / name / 'SKILL.md'
               data = path.read_text(encoding='utf-8')
-              assert data.startswith('---\\n'), f'{path}: missing YAML frontmatter'
-              assert f'name: {name}\\n' in data.split('---', 2)[1], f'{path}: wrong name'
+              assert data.startswith('---\n'), f'{path}: missing YAML frontmatter'
+              assert f'name: {name}\n' in data.split('---', 2)[1], f'{path}: wrong name'
               assert (path.parent / 'scripts').is_dir(), f'{path}: scripts missing'
           PY
       - name: Discover skills using official skills CLI
