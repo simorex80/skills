@@ -132,6 +132,18 @@ def batch(workspace: Path, input_dir: str, output_dir: str, *, recursive: bool =
         raise ConversionError("Output directory cannot be nested inside input directory.")
     candidates = sorted(directory.rglob("*") if recursive else directory.iterdir())
     sources = [p for p in candidates if p.is_file() and p.suffix.lower() in FORMATS]
+    # Two distinct formats can map to the same Markdown destination.
+    # Reject the whole batch before publishing any output.
+    destinations: dict[str, Path] = {}
+    for entry in sources:
+        target = str(entry.relative_to(directory).with_suffix(".md")).casefold()
+        if target in destinations:
+            other = destinations[target]
+            raise ConversionError(
+                f"Batch destination collision: {other.relative_to(directory)} and "
+                f"{entry.relative_to(directory)}."
+            )
+        destinations[target] = entry
     if len(sources) > MAX_BATCH_FILES:
         raise ConversionError(f"Batch exceeds {MAX_BATCH_FILES} file limit.")
     summary: dict = {"converted": [], "failed": []}
