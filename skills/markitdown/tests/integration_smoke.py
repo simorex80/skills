@@ -22,7 +22,9 @@ MARKER = "SkillIntegrationFixture2026"
 
 def main() -> None:
     with TemporaryDirectory() as tmp:
-        root = Path(tmp)
+        root = Path(tmp) / "input"
+        root.mkdir()
+        output_root = Path(tmp) / "output"
         pdf = root / "sample-pdf.pdf"
         document = root / "sample-docx.docx"
         slides = root / "sample-pptx.pptx"
@@ -61,13 +63,13 @@ def main() -> None:
 
         # Test publication and batch against actual converter API, too.
         result = subprocess.run(
-            [sys.executable, str(CONVERTER), "batch", str(root), "--output-dir", str(root / "out")],
+            [sys.executable, str(CONVERTER), "batch", str(root), "--output-dir", str(output_root)],
             cwd=root, capture_output=True, text=True, timeout=240, check=False,
         )
         if result.returncode != 0:
             raise AssertionError(f"Batch smoke test failed: {result.stderr}")
         for source in (pdf, document, slides, spreadsheet, html):
-            output = root / "out" / (source.stem + ".md")
+            output = output_root / (source.stem + ".md")
             if MARKER not in output.read_text(encoding="utf-8"):
                 raise AssertionError(f"Missing converted content: {output}")
 
