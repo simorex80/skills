@@ -1,0 +1,24 @@
+{
+  "name": "simorex-skills",
+  "owner": {
+    "name": "simorex80"
+  },
+  "metadata": {
+    "description": "Independent agent skills plugins for GitHub Copilot",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "remote-llm-wiki",
+      "description": "Shared remote GitHub LLM Wiki memory without cloning.",
+      "version": "0.1.0",
+      "source": "./skills/remote-llm-wiki"
+    },
+    {
+      "name": "markitdown",
+      "description": "Document extraction and conversion to Markdown.",
+      "version": "0.1.0",
+      "source": "./skills/markitdown"
+    }
+  ]
+}

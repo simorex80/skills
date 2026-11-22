@@ -1,0 +1,12 @@
+{
+  "name": "markitdown",
+  "version": "0.1.0",
+  "description": "Convert and extract local documents into Markdown using Microsoft's MarkItDown.",
+  "skills": [
+    "."
+  ],
+  "author": {
+    "name": "simorex80"
+  },
+  "repository": "https://github.com/simorex80/skills"
+}

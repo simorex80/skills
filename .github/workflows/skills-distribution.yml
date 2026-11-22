@@ -5,12 +5,18 @@ on:
     paths:
       - 'skills/**'
       - 'plugin.json'
+      - '.github/plugin/**'
+      - '.claude-plugin/**'
+      - 'tests/test_plugin_marketplaces.py'
       - '.github/workflows/skills-distribution.yml'
   push:
     branches: [main]
     paths:
       - 'skills/**'
       - 'plugin.json'
+      - '.github/plugin/**'
+      - '.claude-plugin/**'
+      - 'tests/test_plugin_marketplaces.py'
       - '.github/workflows/skills-distribution.yml'
   schedule:
     - cron: '23 6 * * 1'
@@ -40,6 +46,16 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
+      - name: Validate independent Copilot and Claude marketplaces
+        run: python3 -m unittest discover -s tests -p 'test_plugin_marketplaces.py' -v
+      - name: Validate Claude marketplace and both plugins with official CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global @anthropic-ai/claude-code
+          claude plugin validate . --strict
+          claude plugin validate ./skills/remote-llm-wiki --strict
+          claude plugin validate ./skills/markitdown --strict
       - name: Verify plugin manifest and dynamically discover skills
         shell: bash
         run: |
