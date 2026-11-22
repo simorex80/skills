@@ -5,12 +5,18 @@ on:
     paths:
       - 'skills/**'
       - 'plugin.json'
+      - '.github/plugin/**'
+      - '.claude-plugin/**'
+      - 'tests/test_plugin_marketplaces.py'
       - '.github/workflows/skills-distribution.yml'
   push:
     branches: [main]
     paths:
       - 'skills/**'
       - 'plugin.json'
+      - '.github/plugin/**'
+      - '.claude-plugin/**'
+      - 'tests/test_plugin_marketplaces.py'
       - '.github/workflows/skills-distribution.yml'
   schedule:
     - cron: '23 6 * * 1'
@@ -40,6 +46,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
+      - name: Validate independent Copilot and Claude marketplaces
+        run: python3 -m unittest discover -s tests -p 'test_plugin_marketplaces.py' -v
       - name: Verify plugin manifest and dynamically discover skills
         shell: bash
         run: |
