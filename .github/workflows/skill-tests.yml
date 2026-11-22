@@ -1,0 +1,27 @@
+name: Skill tests
+
+on:
+  push:
+    paths:
+      - 'skills/remote-llm-wiki/**'
+      - '.github/workflows/skill-tests.yml'
+  pull_request:
+    paths:
+      - 'skills/remote-llm-wiki/**'
+      - '.github/workflows/skill-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  remote-llm-wiki:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Python syntax and unit tests
+        run: |
+          python -m compileall -q skills/remote-llm-wiki/scripts skills/remote-llm-wiki/tests
+          python -m unittest discover -s skills/remote-llm-wiki/tests -v
