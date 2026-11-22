@@ -8,7 +8,7 @@ import json
 import re
 import subprocess
 import sys
-from urllib.parse import quote, urlencode
+from urllib.parse import quote
 
 
 COMMIT_QUERY = """
@@ -93,10 +93,33 @@ def snapshot(host: str, repo: str, branch: str) -> str:
 
 
 def read_file(host: str, repo: str, sha: str, path: str) -> str:
-    path = quote(wiki_path(path), safe="/")
-    query = urlencode({"ref": sha})
-    endpoint = f"repos/{repo}/contents/{path}?{query}"
-    return gh_api(host, [endpoint, "-H", "Accept: application/vnd.github.raw+json"])
+    parts = wiki_path(path).split("/")
+    endpoint = f"repos/{repo}/git"
+    commit_object = json.loads(gh_api(host, [f"{endpoint}/commits/{sha}"]))
+    object_sha = parse_sha(commit_object["tree"]["sha"])
+    for index, part in enumerate(parts):
+        tree = json.loads(gh_api(host, [f"{endpoint}/trees/{object_sha}"]))
+        entry = next((item for item in tree["tree"] if item["path"] == part), None)
+        if entry is None:
+            if tree.get("truncated"):
+                raise WikiError(f"Cannot verify {path!r} because GitHub truncated the tree.")
+            raise WikiError(f"File not found: {path!r}.")
+        if index == len(parts) - 1:
+            if entry["type"] != "blob" or entry["mode"] not in {"100644", "100755"}:
+                raise WikiError(f"Not a regular file: {path!r}.")
+        elif entry["type"] != "tree" or entry["mode"] != "040000":
+            raise WikiError(f"Path does not traverse only directories: {path!r}.")
+        object_sha = parse_sha(entry["sha"])
+    return gh_api(host, [f"{endpoint}/blobs/{object_sha}", "-H", "Accept: application/vnd.github.raw+json"])
+
+
+def unique_plan_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise WikiError(f"Duplicate key in JSON plan: {key!r}.")
+        result[key] = value
+    return result
 
 
 def file_changes(plan: object) -> dict[str, list[dict[str, str]]]:
@@ -182,10 +205,10 @@ def main() -> int:
             sys.stdout.buffer.write(content.encode("utf-8"))
         else:
             if args.plan == "-":
-                plan = json.load(sys.stdin.buffer)
+                plan = json.load(sys.stdin.buffer, object_pairs_hook=unique_plan_keys)
             else:
                 with open(args.plan, encoding="utf-8") as plan_file:
-                    plan = json.load(plan_file)
+                    plan = json.load(plan_file, object_pairs_hook=unique_plan_keys)
             print(json.dumps(commit(args.host, args.repo, args.branch, args.sha, args.message, plan)))
     except (WikiError, OSError, ValueError, argparse.ArgumentTypeError) as exc:
         print(f"remote-llm-wiki: {exc}", file=sys.stderr)
