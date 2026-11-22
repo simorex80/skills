@@ -8,6 +8,8 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
 def discover_skills():
     """Treat every immediate skills/ subdirectory as a required skill."""
     root = ROOT / "skills"
@@ -22,7 +24,7 @@ def discover_skills():
 
 
 class PluginMarketplaceTests(unittest.TestCase):
-    def test_catalogs_contain_exactly_two_independent_plugins(self):
+    def test_catalogs_match_discovered_independent_plugins(self):
         expected = discover_skills()
         for path in (
             ROOT / ".github/plugin/marketplace.json",
