@@ -8,6 +8,7 @@ on:
       - '.github/plugin/**'
       - '.claude-plugin/**'
       - 'tests/test_plugin_marketplaces.py'
+      - 'AGENTS.md'
       - '.github/workflows/skills-distribution.yml'
   push:
     branches: [main]
@@ -17,6 +18,7 @@ on:
       - '.github/plugin/**'
       - '.claude-plugin/**'
       - 'tests/test_plugin_marketplaces.py'
+      - 'AGENTS.md'
       - '.github/workflows/skills-distribution.yml'
   schedule:
     - cron: '23 6 * * 1'
@@ -54,8 +56,10 @@ jobs:
           set -euo pipefail
           npm install --global @anthropic-ai/claude-code
           claude plugin validate . --strict
-          claude plugin validate ./skills/remote-llm-wiki --strict
-          claude plugin validate ./skills/markitdown --strict
+          for skill in skills/*/; do
+            [[ -f "${skill}SKILL.md" ]] || { echo "Missing SKILL.md in ${skill}"; exit 1; }
+            claude plugin validate "./${skill%/}" --strict
+          done
       - name: Verify plugin manifest and dynamically discover skills
         shell: bash
         run: |
