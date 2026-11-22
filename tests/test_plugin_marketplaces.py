@@ -33,7 +33,10 @@ class PluginMarketplaceTests(unittest.TestCase):
                     self.assertTrue(directory.is_relative_to(ROOT.resolve()))
                     self.assertTrue((directory / "SKILL.md").is_file())
                     self.assertTrue((directory / "scripts").is_dir())
-                    self.assertRegex(plugin["version"], r"^\d+\.\d+\.\d+$")
+                    if path.parts[-3:] == (".github", "plugin", "marketplace.json"):
+                        self.assertRegex(plugin["version"], r"^\d+\.\d+\.\d+$")
+                    else:
+                        self.assertNotIn("version", plugin, "Claude plugin versions belong in their manifests")
                     self.assertTrue(plugin["description"])
 
     def test_manifests_and_skill_names_are_consistent(self):
