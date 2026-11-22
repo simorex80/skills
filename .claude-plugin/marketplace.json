@@ -1,0 +1,21 @@
+{
+  "name": "simorex-skills",
+  "owner": {
+    "name": "simorex80"
+  },
+  "description": "Independent agent skills plugins for Claude Code",
+  "plugins": [
+    {
+      "name": "remote-llm-wiki",
+      "description": "Shared remote GitHub LLM Wiki memory without cloning.",
+      "source": "./skills/remote-llm-wiki",
+      "version": "0.1.0"
+    },
+    {
+      "name": "markitdown",
+      "description": "Document extraction and conversion to Markdown.",
+      "source": "./skills/markitdown",
+      "version": "0.1.0"
+    }
+  ]
+}
