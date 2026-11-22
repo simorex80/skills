@@ -4,5 +4,9 @@
   "description": "Work with shared LLM Wiki project memory in a dedicated remote GitHub repository without cloning it.",
   "skills": [
     "."
-  ]
+  ],
+  "author": {
+    "name": "simorex80"
+  },
+  "repository": "https://github.com/simorex80/skills"
 }
