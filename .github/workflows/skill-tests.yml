@@ -8,6 +8,7 @@ on:
       - 'README.md'
       - '.github/workflows/skill-tests.yml'
       - 'plugin.json'
+      - 'docs/**'
   pull_request:
     paths:
       - 'skills/**'
@@ -76,3 +77,44 @@ jobs:
       - name: Cross-skill regression tests
         run: python -m unittest discover -s tests -v
 
+
+  distribution:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Validate Agent Plugins manifest and skill metadata
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          plugin = json.loads(Path('plugin.json').read_text(encoding='utf-8'))
+          assert plugin['name'] == 'simorex-skills'
+          assert plugin['$schema'] == 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json'
+          for name in ('remote-llm-wiki', 'markitdown'):
+              path = Path('skills') / name / 'SKILL.md'
+              data = path.read_text(encoding='utf-8')
+              assert data.startswith('---\n'), f'{path}: missing YAML frontmatter'
+              assert f'name: {name}\n' in data.split('---', 2)[1], f'{path}: wrong name'
+              assert (path.parent / 'scripts').is_dir(), f'{path}: scripts missing'
+          PY
+      - name: Discover skills using official skills CLI
+        run: |
+          npx --yes skills@latest add "$GITHUB_WORKSPACE" --list 2>&1 | tee /tmp/skill-discovery.txt
+          grep -F 'remote-llm-wiki' /tmp/skill-discovery.txt
+          grep -F 'markitdown' /tmp/skill-discovery.txt
+      - name: Install both skills in an isolated project
+        run: |
+          set -euo pipefail
+          target="$(mktemp -d)"
+          cd "$target"
+          npx --yes skills@latest add "$GITHUB_WORKSPACE" --skill '*' --agent github-copilot --yes --copy
+          for skill in remote-llm-wiki markitdown; do
+            test -s ".agents/skills/$skill/SKILL.md"
+            test -d ".agents/skills/$skill/scripts"
+          done
