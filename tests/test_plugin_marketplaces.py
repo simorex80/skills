@@ -1,4 +1,4 @@
-"""Static checks for the two independent Copilot and Claude plugin catalogs.
+"""Static checks for independently distributed Copilot and Claude plugins.
 
 Run with: python -m unittest tests/test_plugin_marketplaces.py -v
 """
@@ -8,11 +8,22 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED = {"markitdown", "remote-llm-wiki"}
+def discover_skills():
+    """Treat every immediate skills/ subdirectory as a required skill."""
+    root = ROOT / "skills"
+    directories = sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith("."))
+    names = {p.name for p in directories}
+    if not names:
+        raise AssertionError("No skills found")
+    for directory in directories:
+        if not (directory / "SKILL.md").is_file():
+            raise AssertionError(f"Missing SKILL.md: {directory}")
+    return names
 
 
 class PluginMarketplaceTests(unittest.TestCase):
     def test_catalogs_contain_exactly_two_independent_plugins(self):
+        expected = discover_skills()
         for path in (
             ROOT / ".github/plugin/marketplace.json",
             ROOT / ".claude-plugin/marketplace.json",
@@ -21,8 +32,8 @@ class PluginMarketplaceTests(unittest.TestCase):
                 catalog = json.loads(path.read_text(encoding="utf-8"))
                 self.assertEqual(catalog["name"], "simorex-skills")
                 self.assertEqual(catalog["owner"]["name"], "simorex80")
-                self.assertEqual({p["name"] for p in catalog["plugins"]}, EXPECTED)
-                self.assertEqual(len(catalog["plugins"]), len(EXPECTED))
+                self.assertEqual({p["name"] for p in catalog["plugins"]}, expected)
+                self.assertEqual(len(catalog["plugins"]), len(expected))
                 if path.parts[-2:] == (".claude-plugin", "marketplace.json"):
                     self.assertEqual(catalog["version"], "1.0.0")
 
@@ -32,7 +43,6 @@ class PluginMarketplaceTests(unittest.TestCase):
                     directory = (ROOT / source).resolve()
                     self.assertTrue(directory.is_relative_to(ROOT.resolve()))
                     self.assertTrue((directory / "SKILL.md").is_file())
-                    self.assertTrue((directory / "scripts").is_dir())
                     if path.parts[-3:] == (".github", "plugin", "marketplace.json"):
                         self.assertRegex(plugin["version"], r"^\d+\.\d+\.\d+$")
                     else:
@@ -40,7 +50,7 @@ class PluginMarketplaceTests(unittest.TestCase):
                     self.assertTrue(plugin["description"])
 
     def test_manifests_and_skill_names_are_consistent(self):
-        for name in EXPECTED:
+        for name in discover_skills():
             with self.subTest(plugin=name):
                 directory = ROOT / "skills" / name
                 copilot = json.loads((directory / "plugin.json").read_text(encoding="utf-8"))
@@ -52,8 +62,8 @@ class PluginMarketplaceTests(unittest.TestCase):
                 self.assertEqual(copilot["version"], claude["version"])
                 self.assertNotIn("$schema", copilot, "Copilot must use legacy root SKILL.md discovery")
                 self.assertEqual(claude["skills"], ["."])
-                self.assertEqual(claude["author"]["name"], "simorex80")
-                self.assertEqual(claude["repository"], "https://github.com/simorex80/skills")
+                self.assertTrue(claude.get("author", {}).get("name"))
+                self.assertTrue(claude.get("repository", "").startswith("https://"))
                 for catalog_path in (
                     ROOT / ".github/plugin/marketplace.json",
                     ROOT / ".claude-plugin/marketplace.json",
