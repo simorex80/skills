@@ -57,6 +57,8 @@ python -m unittest discover -s tests -v
 
 The unit and regression tests run without GitHub credentials or an installed MarkItDown converter. [GitHub Actions](.github/workflows/skill-tests.yml) separately installs MarkItDown and document-generation dependencies to run real converter integration smoke tests across its supported Python versions.
 
+The [skill distribution workflow](.github/workflows/skills-distribution.yml) checks the plugin manifest, discovers every `skills/*/SKILL.md`, and verifies standalone installation with the current skills CLI on relevant PRs, main branch changes, and weekly. It installs into a disposable directory with telemetry disabled; these are compatibility checks, not catalog registration or synthetic download events.
+
 To contribute a new skill, create `skills/<name>/SKILL.md` with `name` and `description` YAML frontmatter, add its helper and tests as needed, and link it from this README. Keep behavioral rules in the skill and tutorials in `docs/` or `examples/`.
 
 [GitHub Copilot CLI plugin documentation](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/plugins-finding-installing) · [Microsoft MarkItDown](https://github.com/microsoft/markitdown)
