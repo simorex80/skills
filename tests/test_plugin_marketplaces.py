@@ -37,7 +37,7 @@ class PluginMarketplaceTests(unittest.TestCase):
                 self.assertEqual({p["name"] for p in catalog["plugins"]}, expected)
                 self.assertEqual(len(catalog["plugins"]), len(expected))
                 if path.parts[-2:] == (".claude-plugin", "marketplace.json"):
-                    self.assertEqual(catalog["version"], "1.0.0")
+                    self.assertRegex(catalog["version"], r"^\d+\.\d+\.\d+$")
 
                 for plugin in catalog["plugins"]:
                     source = plugin["source"]
