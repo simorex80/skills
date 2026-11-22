@@ -7,6 +7,7 @@ A collection of agent skills for GitHub Copilot CLI.
 | Skill | What it does |
 | --- | --- |
 | [MarkItDown](skills/markitdown/SKILL.md) | Converts local PDF, Word (`.docx`), PowerPoint (`.pptx`), and Excel (`.xlsx`) files to Markdown with Microsoft's MarkItDown CLI. |
+| [Remote LLM Wiki](skills/remote-llm-wiki/SKILL.md) | Reads and updates a Markdown wiki directly in a GitHub or GitHub Enterprise repository. |
 
 ## Install in Copilot CLI
 
@@ -32,6 +33,14 @@ Place a text-based PDF named `manual.pdf` in the working directory, then ask Cop
 > Use the /markitdown skill to convert manual.pdf to manual.md.
 
 Open `manual.md` and check that the extracted text and headings are present. If the destination already exists, provide a different filename. Image-only scans may need OCR, which this skill leaves disabled.
+
+## Use Remote LLM Wiki
+
+Install Python 3.10+ and [GitHub CLI](https://cli.github.com/) in the environment where Copilot runs. Authenticate `gh` for the wiki's GitHub hostname. If the collection is already installed, run `copilot plugin update simorex-skills`.
+
+> Use /remote-llm-wiki to read the wiki at github.com/ORG/REPO on branch main and summarize the deployment notes.
+
+Provide the hostname, repository and branch when requesting a wiki operation. For an update, describe the change and ask the skill to commit it to that branch. GitHub checks the active identity's repository permissions and branch rules. The skill fetches only the requested content and does not require a local checkout.
 
 ## Add a skill
 
