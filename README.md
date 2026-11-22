@@ -64,7 +64,7 @@ The `SKILL.md` files contain the operational instructions for agents. The guides
 
 ## Agent-assisted development
 
-Development agents should follow [AGENTS.md](AGENTS.md), the shared source of truth for architecture, contribution, security, tests, and plugin distribution. GitHub Copilot loads [.github/copilot-instructions.md](.github/copilot-instructions.md); Claude Code loads [CLAUDE.md](CLAUDE.md). These instructions apply to maintaining this repository, not to users installing the skills.
+Development agents should follow [AGENTS.md](AGENTS.md), the single repository guide for architecture, contribution, security, tests, and plugin distribution. These instructions apply to maintaining this repository, not to users installing the skills.
 
 ## Development and tests
 
