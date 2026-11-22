@@ -23,6 +23,8 @@ class PluginMarketplaceTests(unittest.TestCase):
                 self.assertEqual(catalog["owner"]["name"], "simorex80")
                 self.assertEqual({p["name"] for p in catalog["plugins"]}, EXPECTED)
                 self.assertEqual(len(catalog["plugins"]), len(EXPECTED))
+                if path.parts[-2:] == (".claude-plugin", "marketplace.json"):
+                    self.assertEqual(catalog["version"], "1.0.0")
 
                 for plugin in catalog["plugins"]:
                     source = plugin["source"]
@@ -47,13 +49,18 @@ class PluginMarketplaceTests(unittest.TestCase):
                 self.assertEqual(copilot["version"], claude["version"])
                 self.assertNotIn("$schema", copilot, "Copilot must use legacy root SKILL.md discovery")
                 self.assertEqual(claude["skills"], ["."])
+                self.assertEqual(claude["author"]["name"], "simorex80")
+                self.assertEqual(claude["repository"], "https://github.com/simorex80/skills")
                 for catalog_path in (
                     ROOT / ".github/plugin/marketplace.json",
                     ROOT / ".claude-plugin/marketplace.json",
                 ):
                     entries = json.loads(catalog_path.read_text(encoding="utf-8"))["plugins"]
                     entry = next(p for p in entries if p["name"] == name)
-                    self.assertEqual(entry["version"], copilot["version"])
+                    if catalog_path.parts[-3:] == (".github", "plugin", "marketplace.json"):
+                        self.assertEqual(entry["version"], copilot["version"])
+                    else:
+                        self.assertNotIn("version", entry, "Claude plugin manifest owns the version")
 
 
 if __name__ == "__main__":
