@@ -7,7 +7,7 @@ These instructions apply to contributors and coding agents working **on this rep
 - This repository publishes reusable, independently installable agent skills. The source of truth for each skill is `skills/<name>/SKILL.md`, with any local helper code and tests kept within that skill directory.
 - Maintain three distribution channels: standalone installation via the skills CLI/skills.sh, the GitHub Copilot CLI marketplace (`.github/plugin/marketplace.json`), and the Claude Code marketplace (`.claude-plugin/marketplace.json`).
 - Each skill is a **separate plugin**. Never consolidate `remote-llm-wiki` and `markitdown` into one marketplace plugin.
-- Do not duplicate SKILL.md content across distribution channels. Keep both marketplace entries, each plugin's manifest, and documentation consistent.
+- Do not duplicate SKILL.md content across distribution channels. Keep both marketplace entries, each plugin's manifest, and documentation consistent. GitHub Copilot's marketplace entries declare plugin versions; Claude's marketplace entries omit versions when the individual `.claude-plugin/plugin.json` already declares them, to avoid version-precedence warnings.
 - The repository-root `plugin.json` is retained for existing compatibility; do not confuse it with independent plugin manifests under `skills/<name>/`.
 - Treat `docs/` as human-facing explanations and `examples/` as illustrative material, not the authoritative execution policy. Document behavior in SKILL.md.
 
@@ -58,7 +58,7 @@ python -m compileall -q skills/remote-llm-wiki/scripts skills/markitdown/scripts
 
 1. Add `skills/<name>/SKILL.md` and any required `scripts/` and `tests/`.
 2. Add `skills/<name>/plugin.json` and `skills/<name>/.claude-plugin/plugin.json`.
-3. Register the separate plugin in **both** marketplace catalogs and keep plugin identifiers and version fields aligned.
+3. Register the separate plugin in **both** marketplace catalogs. Keep versions in the Copilot marketplace and in each plugin manifest aligned; do not duplicate the version in the Claude marketplace entry when its plugin manifest declares it.
 4. Update README, docs, and automated validation as required.
 5. Verify skills CLI discovery, catalog validation, and supported client installation before declaring distribution fully operational.
 
