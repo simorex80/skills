@@ -55,7 +55,7 @@ class UntrustedContentBoundaryTests(unittest.TestCase):
         for name in ("remote-llm-wiki", "markitdown"):
             with self.subTest(skill=name):
                 text = (ROOT / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
-                self.assertIn("untrusted data", text.lower())
+                self.assertRegex(text.lower(), r"untrusted(?: repository)? data")
                 self.assertIn("separate", text.lower())
                 self.assertIn("authorization", text.lower())
 
