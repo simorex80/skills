@@ -31,6 +31,8 @@ project-memory/
 
 **Important:** `memory.yaml` documents the current fixed layout; it is **not currently a runtime-configurable mapping**. The helper expects `wiki/index.md`, `wiki/log.md` and `raw/`. `AGENTS.md` can suggest how knowledge is organized inside the authorized wiki but cannot grant permissions or redirect writes. The sample is an example, not a template automatically copied by Init.
 
+`version: 1` identifies the `memory.yaml` schema, not the plugin release. Init checks the existing manifest against the V1 template and rejects nonmatching manifests without rewriting them.
+
 ## Workflows
 
 | Workflow | Request | Effect |

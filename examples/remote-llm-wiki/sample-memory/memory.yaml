@@ -1,4 +1,4 @@
-version: 2
+version: 1
 format: llm-wiki
 paths:
   schema: AGENTS.md
