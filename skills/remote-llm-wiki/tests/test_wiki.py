@@ -167,6 +167,31 @@ class WikiV2Tests(unittest.TestCase):
             {"kind": "broken_link", "path": "wiki/notes.MD", "target": "missing.md"},
         ])
 
+    def test_lint_skips_out_of_scope_anchor_and_continues(self):
+        pages = {**wiki.DEFAULT_FILES, "wiki/index.md":
+                 "[Setup](../README.md#setup)\n[Broken](missing.md)\n"}
+        pages["README.md"] = "# Setup\n"
+        with patch.object(wiki, "list_files", return_value=list(pages)), \
+             patch.object(wiki, "read_file", side_effect=lambda h, r, sha, p: pages[p]) as read:
+            result = wiki.lint_memory("github.com", "o/r", "a" * 40)
+        self.assertNotIn("README.md", [call.args[3] for call in read.call_args_list])
+        self.assertEqual(result["issues"], [
+            {"kind": "broken_link", "path": "wiki/index.md", "target": "missing.md"},
+        ])
+        self.assertEqual(result["unchecked_anchors"], [
+            {"path": "wiki/index.md", "target": "../README.md#setup"},
+        ])
+
+    def test_lint_reports_missing_out_of_scope_target_as_broken_link(self):
+        pages = {**wiki.DEFAULT_FILES, "wiki/index.md": "[Setup](../README.md#setup)\n"}
+        with patch.object(wiki, "list_files", return_value=list(pages)), \
+             patch.object(wiki, "read_file", side_effect=lambda h, r, sha, p: pages[p]):
+            result = wiki.lint_memory("github.com", "o/r", "a" * 40)
+        self.assertEqual(result["issues"], [
+            {"kind": "broken_link", "path": "wiki/index.md", "target": "../README.md#setup"},
+        ])
+        self.assertNotIn("unchecked_anchors", result)
+
     def test_graphql_branch_name_payload(self):
         sha = "a" * 40
         response = {"data": {"createCommitOnBranch": {"commit": {

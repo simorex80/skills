@@ -70,7 +70,7 @@ Do not place passwords, access tokens, secret keys, personal identifiers or conf
 ## Lint
 
 1. Snapshot the branch, then run `python "$SCRIPT" --host "$HOST" --repo "$REPO" lint "$SHA"`.
-2. The helper reports missing required files and Markdown link issues. The agent then **separately** reviews consistency, missing citations, duplicate pages and stale/conflicting knowledge. A clean script result does not prove semantic consistency.
+2. The helper reports missing required files and Markdown link issues. If `unchecked_anchors` is present, those references point to existing files outside the permitted read scope. Report their anchors as unverified, not broken; do not broaden read access to verify them. The agent then **separately** reviews consistency, missing citations, duplicate pages and stale/conflicting knowledge. A clean script result does not prove semantic consistency.
 3. Report issues with file references. Only apply fixes when requested and permitted, using the same guarded commit workflow as Ingest. Never automatically resolve ambiguous contradictions.
 
 ## Boundaries

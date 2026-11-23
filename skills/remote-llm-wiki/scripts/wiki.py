@@ -265,6 +265,7 @@ def _heading_anchors(markdown: str) -> set[str]:
 def lint_memory(host: str, repo: str, sha: str) -> dict:
     files = set(list_files(host, repo, sha))
     problems = []
+    unchecked_anchors = []
     for required in DEFAULT_FILES:
         if required not in files:
             problems.append({"kind": "missing_required_file", "path": required})
@@ -310,10 +311,18 @@ def lint_memory(host: str, repo: str, sha: str) -> dict:
             if resolved not in files:
                 problems.append({"kind": "broken_link", "path": path, "target": original})
             elif fragment and resolved.lower().endswith(".md"):
+                try:
+                    wiki_path(resolved)
+                except WikiError:
+                    unchecked_anchors.append({"path": path, "target": original})
+                    continue
                 if fragment.casefold() not in _heading_anchors(page(resolved)):
                     problems.append({"kind": "broken_anchor", "path": path, "target": original})
-    return {"sha": sha, "files_checked": len(markdown_files), "issues": problems,
-            "semantic_review_required": True}
+    result = {"sha": sha, "files_checked": len(markdown_files), "issues": problems,
+              "semantic_review_required": True}
+    if unchecked_anchors:
+        result["unchecked_anchors"] = unchecked_anchors
+    return result
 
 
 def unique_plan_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
