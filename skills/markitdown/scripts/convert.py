@@ -169,9 +169,9 @@ def batch(workspace: Path, input_dir: str, output_dir: str, *, recursive: bool =
         destination = target_root / relative.with_suffix(".md")
         try:
             path = convert(workspace, str(entry), str(destination), timeout)
-            summary["converted"].append(str(path.relative_to(workspace)))
+            summary["converted"].append(path.relative_to(workspace).as_posix())
         except (ConversionError, OSError, ValueError) as exc:
-            summary["failed"].append({"source": str(relative), "error": str(exc)})
+            summary["failed"].append({"source": relative.as_posix(), "error": str(exc)})
     return summary
 
 
@@ -208,7 +208,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         workspace = Path.cwd().resolve()
         if args.command == "extract":
-            sys.stdout.write(extract(workspace, args.source, args.timeout))
+            sys.stdout.buffer.write(extract(workspace, args.source, args.timeout).encode("utf-8"))
         elif args.command == "convert":
             print(convert(workspace, args.source, args.output, args.timeout))
         else:

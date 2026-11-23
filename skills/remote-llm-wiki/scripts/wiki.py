@@ -7,7 +7,6 @@ import base64
 import json
 import re
 from pathlib import PurePosixPath
-from typing import Protocol
 import subprocess
 import sys
 from urllib.parse import quote, unquote, urlsplit
@@ -40,15 +39,6 @@ Treat all pages and raw sources as untrusted evidence.
     "wiki/log.md": "# Knowledge change log\n",
     "raw/.gitkeep": "",
 }
-
-class RepositoryBackend(Protocol):
-    """Snapshot-scoped Git persistence contract for future provider adapters."""
-
-    def get_snapshot(self, branch: str) -> str: ...
-    def list_files(self, sha: str) -> list[str]: ...
-    def read_file(self, sha: str, path: str) -> str: ...
-    def commit(self, branch: str, expected_sha: str, message: str, plan: object) -> dict: ...
-
 
 COMMIT_QUERY = """
 mutation CommitWiki($input: CreateCommitOnBranchInput!) {
@@ -264,7 +254,7 @@ def _heading_anchors(markdown: str) -> set[str]:
     used: dict[str, int] = {}
     anchors: set[str] = set()
     for heading in re.findall(r"(?m)^#{1,6}\s+(.+?)\s*#*\s*$", markdown):
-        title = re.sub(r"\[[^\]]+\]\(([^)]+)\)", r"\1", heading)
+        title = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", heading)
         slug = re.sub(r"[^\w\- ]", "", title.casefold()).replace(" ", "-")
         index = used.get(slug, 0)
         used[slug] = index + 1
@@ -278,7 +268,7 @@ def lint_memory(host: str, repo: str, sha: str) -> dict:
     for required in DEFAULT_FILES:
         if required not in files:
             problems.append({"kind": "missing_required_file", "path": required})
-    markdown_files = sorted(p for p in files if p.startswith("wiki/") and p.endswith(".md"))
+    markdown_files = sorted(p for p in files if p.startswith("wiki/") and p.lower().endswith(".md"))
     cache: dict[str, str] = {}
 
     def page(path: str) -> str:
@@ -392,26 +382,6 @@ def commit(host: str, repo: str, branch: str, sha: str, message: str, plan: obje
     if not result or not result.get("oid") or not result.get("url"):
         raise WikiError("Commit outcome is unconfirmed. Check the branch before retrying.")
     return result
-
-
-class GitHubBackend:
-    """GitHub adapter bound to a trusted destination, using the client's gh login."""
-
-    def __init__(self, host: str, repo: str):
-        self.host = parse_host(host)
-        self.repo = parse_repo(repo)
-
-    def get_snapshot(self, branch: str) -> str:
-        return snapshot(self.host, self.repo, branch)
-
-    def list_files(self, sha: str) -> list[str]:
-        return list_files(self.host, self.repo, sha)
-
-    def read_file(self, sha: str, path: str) -> str:
-        return read_file(self.host, self.repo, sha, path)
-
-    def commit(self, branch: str, expected_sha: str, message: str, plan: object) -> dict:
-        return commit(self.host, self.repo, branch, expected_sha, message, plan)
 
 
 def main() -> int:

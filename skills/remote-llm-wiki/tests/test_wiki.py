@@ -150,6 +150,23 @@ class WikiV2Tests(unittest.TestCase):
             ["invalid_link", "broken_anchor"],
         )
 
+    def test_lint_heading_anchor_uses_visible_link_text(self):
+        pages = {**wiki.DEFAULT_FILES, "wiki/index.md":
+                 "# [Project](https://example.com)\n\n[Jump](#project)\n"}
+        with patch.object(wiki, "list_files", return_value=list(pages)), \
+             patch.object(wiki, "read_file", side_effect=lambda h, r, sha, p: pages[p]):
+            result = wiki.lint_memory("github.com", "o/r", "a" * 40)
+        self.assertEqual(result["issues"], [])
+
+    def test_lint_checks_uppercase_markdown_extension(self):
+        pages = {**wiki.DEFAULT_FILES, "wiki/notes.MD": "[Missing](missing.md)\n"}
+        with patch.object(wiki, "list_files", return_value=list(pages)), \
+             patch.object(wiki, "read_file", side_effect=lambda h, r, sha, p: pages[p]):
+            result = wiki.lint_memory("github.com", "o/r", "a" * 40)
+        self.assertEqual(result["issues"], [
+            {"kind": "broken_link", "path": "wiki/notes.MD", "target": "missing.md"},
+        ])
+
     def test_graphql_branch_name_payload(self):
         sha = "a" * 40
         response = {"data": {"createCommitOnBranch": {"commit": {
