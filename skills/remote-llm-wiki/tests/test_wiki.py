@@ -1,4 +1,4 @@
-"""Offline contract tests for remote LLM Wiki V2.
+"""Offline contract tests for Remote LLM Wiki.
 
 Run: python -m unittest discover -s skills/remote-llm-wiki/tests -v
 """
@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-SPEC = importlib.util.spec_from_file_location("wiki_v2", ROOT / "scripts" / "wiki.py")
+SPEC = importlib.util.spec_from_file_location("wiki", ROOT / "scripts" / "wiki.py")
 wiki = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(wiki)
 
@@ -46,7 +46,7 @@ class FakeBackend:
         return {"oid": self.head}
 
 
-class WikiV2Tests(unittest.TestCase):
+class WikiTests(unittest.TestCase):
     def setUp(self):
         self.backend = FakeBackend()
 
@@ -87,6 +87,15 @@ class WikiV2Tests(unittest.TestCase):
                                     bootstrap=True)
         self.assertEqual(len(changes["additions"]), len(wiki.DEFAULT_FILES))
 
+    def test_init_creates_v1_manifest(self):
+        with patch.object(wiki, "snapshot", return_value="a" * 40), \
+             patch.object(wiki, "list_files", return_value=[]), \
+             patch.object(wiki, "commit", return_value={"oid": "b" * 40}) as commit:
+            result = wiki.init_memory("github.com", "org/repo", "main")
+        self.assertEqual(result["status"], "initialized")
+        self.assertEqual(commit.call_args.args[5]["upsert"]["memory.yaml"].splitlines()[0],
+                         "version: 1")
+
     def test_regular_ingest_cannot_modify_manifest(self):
         with self.assertRaises(wiki.WikiError):
             wiki.validate_plan({"upsert": {"AGENTS.md": "bad"}}, set())
@@ -106,11 +115,16 @@ class WikiV2Tests(unittest.TestCase):
 
     def test_init_rejects_incompatible_manifest(self):
         existing = list(wiki.DEFAULT_FILES)
-        with patch.object(wiki, "snapshot", return_value="a" * 40), \
-             patch.object(wiki, "list_files", return_value=existing), \
-             patch.object(wiki, "read_file", return_value="version: 999"):
-            with self.assertRaisesRegex(wiki.WikiError, "schema"):
-                wiki.init_memory("github.com", "org/repo", "main")
+        v2_manifest = "version: 2\n" + wiki.DEFAULT_FILES["memory.yaml"].split("\n", 1)[1]
+        for manifest in (v2_manifest, "invalid manifest"):
+            with self.subTest(manifest=manifest), \
+                 patch.object(wiki, "snapshot", return_value="a" * 40), \
+                 patch.object(wiki, "list_files", return_value=existing), \
+                 patch.object(wiki, "read_file", return_value=manifest), \
+                 patch.object(wiki, "commit") as commit:
+                with self.assertRaisesRegex(wiki.WikiError, "V1 schema"):
+                    wiki.init_memory("github.com", "org/repo", "main")
+                commit.assert_not_called()
 
     def test_lint_rejects_links_escaping_repository(self):
         files = set(wiki.DEFAULT_FILES)
