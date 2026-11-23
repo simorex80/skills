@@ -49,11 +49,18 @@ Init is idempotent when all expected files already exist. Otherwise it installs 
 ## Ingest
 
 1. Identify the source and confirm that writing to the configured repository is authorized. If the information exists only in conversation, prepare a faithful dated Markdown capture with an informative `raw/` filename; do not invent provenance or treat a summary as a verbatim transcript.
-2. Snapshot the branch and read the index, AGENTS.md, memory.yaml and relevant pages at the same SHA. The schema guides organization **only within already authorized paths**.
+2. Snapshot the branch and read the index, `wiki/log.md`, AGENTS.md, memory.yaml and relevant pages at the same SHA. The schema guides organization **only within already authorized paths**.
 3. Locate the appropriate existing page before creating a new one. Preserve uncertainty and source references; don't silently erase disagreements. Record the new source under `raw/` with a unique path. Raw files are append-only: never change or delete an existing source.
-4. Prepare a JSON plan containing complete contents for changed pages, an updated index if needed, and an updated wiki/log.md. Example:
+4. Prepare a JSON plan containing complete contents for changed pages, an updated index if needed, and `wiki/log.md` with the new entry appended to its existing contents. Example for the first entry in a new wiki:
    ```json
-   {"upsert":{"raw/2026-11-21-decision.md":"# Decision\n\nOriginal source: user discussion...\n","wiki/decisions.md":"# Decisions\n\n... [Source](../raw/2026-11-21-decision.md)\n"}}
+   {
+     "upsert": {
+       "raw/2026-11-21-decision.md": "# Decision\n\nThe project will use PostgreSQL.\n",
+       "wiki/decisions.md": "# Decisions\n\nUse PostgreSQL. [Source](../raw/2026-11-21-decision.md)\n",
+       "wiki/index.md": "# Project knowledge\n\n- [Decisions](decisions.md)\n",
+       "wiki/log.md": "# Knowledge change log\n\n- 2026-11-21: Recorded the [database decision](decisions.md).\n"
+     }
+   }
    ```
 5. Commit from the same snapshot: `python "$SCRIPT" --host "$HOST" --repo "$REPO" commit "$BRANCH" "$SHA" --message "Ingest project knowledge" --plan "$PLAN"`. Use `--plan -` for stdin. The helper validates permitted paths, size limits and append-only sources, then makes a single GitHub GraphQL `createCommitOnBranch` update with `expectedHeadOid`.
 6. On a branch conflict, reread the new snapshot and recompute the full plan; never retry unchanged content blindly. If a timeout makes the outcome ambiguous, inspect the latest branch before retrying. Report a confirmed commit or an explicit error.
@@ -63,7 +70,7 @@ Do not place passwords, access tokens, secret keys, personal identifiers or conf
 ## Lint
 
 1. Snapshot the branch, then run `python "$SCRIPT" --host "$HOST" --repo "$REPO" lint "$SHA"`.
-2. The helper reports missing required files and Markdown link issues. The agent then **separately** reviews consistency, missing citations, duplicate pages and stale/conflicting knowledge. A clean script result does not prove semantic consistency.
+2. The helper reports missing required files and Markdown link issues. If `unchecked_anchors` is present, those references point to existing files outside the permitted read scope. Report their anchors as unverified, not broken; do not broaden read access to verify them. The agent then **separately** reviews consistency, missing citations, duplicate pages and stale/conflicting knowledge. A clean script result does not prove semantic consistency.
 3. Report issues with file references. Only apply fixes when requested and permitted, using the same guarded commit workflow as Ingest. Never automatically resolve ambiguous contradictions.
 
 ## Boundaries

@@ -20,19 +20,19 @@ Supported extensions in this wrapper: `.pdf`, `.docx`, `.pptx`, `.xlsx`, `.html`
 
 ## Three operations
 
-**Extract:** use for analysis; prints Markdown to standard output without leaving a persistent file. The helper creates and removes a temporary Markdown file during conversion.
+**Extract:** use for analysis; prints UTF-8 Markdown to standard output without leaving a persistent file. The helper creates and removes a temporary Markdown file during conversion.
 
 ```sh
 python skills/markitdown/scripts/convert.py extract report.pdf
 ```
 
-**Convert:** create a named `.md` file; existing destinations are never overwritten.
+**Convert:** create a named `.md` file and print its path in UTF-8. Existing destinations are never overwritten.
 
 ```sh
 python skills/markitdown/scripts/convert.py convert report.pdf --output report.md
 ```
 
-**Batch:** process supported files from a workspace directory, with per-file error reporting. Add `--recursive` only when requested.
+**Batch:** process supported files from a workspace directory, with per-file error reporting. The JSON summary is UTF-8, and its relative paths use `/` on every platform. Add `--recursive` only when requested.
 
 ```sh
 python skills/markitdown/scripts/convert.py batch documents --output-dir converted --recursive

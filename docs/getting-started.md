@@ -18,10 +18,12 @@ You can target another supported agent using its `--agent` identifier. See the [
 **GitHub Copilot CLI plugin:**
 
 ```sh
-copilot plugin install simorex80/skills
+copilot plugin marketplace add simorex80/skills
+copilot plugin install remote-llm-wiki@simorex-skills
+copilot plugin install markitdown@simorex-skills
 ```
 
-In a new Copilot CLI session, verify `/skills info remote-llm-wiki` or `/skills info markitdown`. To refresh an existing plugin, use `copilot plugin update simorex-skills` and reload/restart the session if necessary.
+Install only the plugins you want. In a new Copilot CLI session, verify `/skills info remote-llm-wiki` or `/skills info markitdown`. To update a plugin, run `copilot plugin update remote-llm-wiki` or `copilot plugin update markitdown`; to refresh the catalog, run `copilot plugin marketplace update simorex-skills`.
 
 ## 2. Choose a task
 

@@ -1,5 +1,7 @@
 """Deterministic MarkItDown V2 tests: no converter installation required."""
 import importlib.util
+import io
+import json
 import subprocess
 import tempfile
 import unittest
@@ -29,6 +31,63 @@ class TestV2(unittest.TestCase):
             result = converter.extract(self.workspace, self.source.name)
         self.assertEqual(result, "# Converted\n")
         self.assertEqual(list(self.workspace.iterdir()), [self.source])
+
+    def test_extract_cli_writes_utf8_with_legacy_stdout_encoding(self):
+        markdown = "# \u6771\n"
+        def worker(source, target, timeout):
+            target.write_bytes(markdown.encode("utf-8"))
+        with io.TextIOWrapper(io.BytesIO(), encoding="cp1252") as stdout, \
+             patch("sys.stdout", stdout), patch("sys.stderr", io.StringIO()) as stderr, \
+             patch.object(Path, "cwd", return_value=self.workspace), \
+             patch.object(converter, "_run_worker", side_effect=worker):
+            self.assertEqual(converter.main(["extract", self.source.name]), 0, stderr.getvalue())
+            stdout.flush()
+            self.assertEqual(stdout.buffer.getvalue(), b"# \xe6\x9d\xb1\n")
+
+    def test_convert_cli_reports_unicode_destination_in_utf8(self):
+        source = self.workspace / "\u6771.txt"
+        source.touch()
+        destination = source.with_suffix(".md")
+        with io.TextIOWrapper(io.BytesIO(), encoding="cp1252") as stdout, \
+             patch("sys.stdout", stdout), patch("sys.stderr", io.StringIO()) as stderr, \
+             patch.object(Path, "cwd", return_value=self.workspace), \
+             patch.object(converter, "_run_worker", side_effect=self.fake_worker):
+            self.assertEqual(converter.main(["convert", source.name]), 0, stderr.getvalue())
+            stdout.flush()
+            self.assertEqual(stdout.buffer.getvalue().decode("utf-8").splitlines(), [str(destination)])
+        self.assertEqual(destination.read_text(encoding="utf-8"), "# Converted\n")
+
+    def test_batch_cli_reports_unicode_paths_in_utf8(self):
+        source = self.workspace / "input"
+        source.mkdir()
+        (source / "\u6771.txt").touch()
+
+        def worker(path, target, timeout):
+            if path.name == "\u897f.txt":
+                raise converter.ConversionError("bad document")
+            self.fake_worker(path, target, timeout)
+
+        for output, status, failures in (
+            ("result", 0, []),
+            ("mixed", 1, [{"source": "\u897f.txt", "error": "bad document"}]),
+        ):
+            with self.subTest(status=status):
+                if failures:
+                    (source / "\u897f.txt").touch()
+                with io.TextIOWrapper(io.BytesIO(), encoding="cp1252") as stdout, \
+                     patch("sys.stdout", stdout), patch("sys.stderr", io.StringIO()) as stderr, \
+                     patch.object(Path, "cwd", return_value=self.workspace), \
+                     patch.object(converter, "_run_worker", side_effect=worker):
+                    self.assertEqual(converter.main(["batch", "input", "--output-dir", output]),
+                                     status, stderr.getvalue())
+                    stdout.flush()
+                    reply = stdout.buffer.getvalue().decode("utf-8")
+                    self.assertTrue(reply, stderr.getvalue())
+                    self.assertEqual(json.loads(reply), {
+                        "converted": [f"{output}/\u6771.md"], "failed": failures,
+                    })
+                self.assertEqual((self.workspace / output / "\u6771.md").read_text(encoding="utf-8"),
+                                 "# Converted\n")
 
     def test_convert_and_cleanup(self):
         with patch.object(converter, "_run_worker", side_effect=self.fake_worker):
@@ -142,9 +201,16 @@ class TestV2(unittest.TestCase):
         nested = self.workspace / "input/nested"
         nested.mkdir(parents=True)
         (nested / "a.json").write_text('{"a":1}', encoding="utf-8")
-        with patch.object(converter, "_run_worker", side_effect=self.fake_worker):
+        (nested / "b.csv").touch()
+        def worker(source, output, timeout):
+            if source.name == "b.csv":
+                raise converter.ConversionError("bad document")
+            self.fake_worker(source, output, timeout)
+        with patch.object(converter, "_run_worker", side_effect=worker):
             self.assertEqual(converter.batch(self.workspace, "input", "result")["converted"], [])
-            self.assertEqual(converter.batch(self.workspace, "input", "result", recursive=True)["converted"], ["result/nested/a.md"])
+            result = converter.batch(self.workspace, "input", "result", recursive=True)
+        self.assertEqual(result["converted"], ["result/nested/a.md"])
+        self.assertEqual(result["failed"], [{"source": "nested/b.csv", "error": "bad document"}])
         with patch.object(converter, "MAX_BATCH_FILES", 0):
             with self.assertRaisesRegex(converter.ConversionError, "limit"):
                 converter.batch(self.workspace, "input", "result", recursive=True)
