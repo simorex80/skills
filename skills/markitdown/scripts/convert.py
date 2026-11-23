@@ -210,11 +210,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "extract":
             sys.stdout.buffer.write(extract(workspace, args.source, args.timeout).encode("utf-8"))
         elif args.command == "convert":
-            print(convert(workspace, args.source, args.output, args.timeout))
+            destination = convert(workspace, args.source, args.output, args.timeout)
+            sys.stdout.buffer.write(f"{destination}{os.linesep}".encode("utf-8"))
         else:
             result = batch(workspace, args.directory, args.output_dir,
                            recursive=args.recursive, timeout=args.timeout)
-            print(json.dumps(result, ensure_ascii=False))
+            summary = json.dumps(result, ensure_ascii=False)
+            sys.stdout.buffer.write(f"{summary}{os.linesep}".encode("utf-8"))
             return 1 if result["failed"] else 0
     except (ConversionError, OSError, RuntimeError, ValueError) as exc:
         print(f"markitdown skill: {exc}", file=sys.stderr)

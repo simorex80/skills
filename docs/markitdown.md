@@ -26,13 +26,13 @@ Supported extensions in this wrapper: `.pdf`, `.docx`, `.pptx`, `.xlsx`, `.html`
 python skills/markitdown/scripts/convert.py extract report.pdf
 ```
 
-**Convert:** create a named `.md` file; existing destinations are never overwritten.
+**Convert:** create a named `.md` file and print its path in UTF-8. Existing destinations are never overwritten.
 
 ```sh
 python skills/markitdown/scripts/convert.py convert report.pdf --output report.md
 ```
 
-**Batch:** process supported files from a workspace directory, with per-file error reporting. Relative paths in the JSON summary use `/` on every platform. Add `--recursive` only when requested.
+**Batch:** process supported files from a workspace directory, with per-file error reporting. The JSON summary is UTF-8, and its relative paths use `/` on every platform. Add `--recursive` only when requested.
 
 ```sh
 python skills/markitdown/scripts/convert.py batch documents --output-dir converted --recursive
