@@ -2,6 +2,7 @@ name: Skill tests
 
 on:
   push:
+    branches: [main]
     paths:
       - 'skills/**'
       - 'tests/**'
