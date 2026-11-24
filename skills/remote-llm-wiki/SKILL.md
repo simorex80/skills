@@ -63,7 +63,7 @@ Init is idempotent when all expected files already exist. Otherwise it installs 
      }
    }
    ```
-5. Before committing, check the source, paired summary, index and appended `ingest` entry together.
+5. Before committing, check the source, paired summary, index and appended `ingest` entry together. Use clickable Markdown links in the index and from the summary to its original; image embeds do not count.
 6. Commit from the same snapshot: `python "$SCRIPT" --host "$HOST" --repo "$REPO" commit "$BRANCH" "$SHA" --message "Ingest project knowledge" --plan "$PLAN"`. Use `--plan -` for stdin. The helper validates permitted paths, size limits and append-only sources, then makes a single GitHub GraphQL `createCommitOnBranch` update with `expectedHeadOid`.
 7. On a branch conflict, reread the new snapshot and recompute and recheck the full plan; never retry unchanged content blindly. If a timeout makes the outcome ambiguous, inspect the latest branch before retrying. Report a confirmed commit or an explicit error.
 

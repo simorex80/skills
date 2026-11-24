@@ -113,6 +113,32 @@ class WikiTests(unittest.TestCase):
     def test_commit_valid_ingest_reads_tree_once(self):
         self.remote_commit(wiki.DEFAULT_FILES, self.ingest_plan(wiki.DEFAULT_FILES))
 
+    def test_images_cannot_satisfy_index_or_source_links(self):
+        for path, issue in (("wiki/index.md", "unindexed_page"),
+                            ("wiki/sources/a.md", "invalid_source_summary")):
+            for form in ("inline", "reference", "shortcut"):
+                with self.subTest(path=path, form=form):
+                    plan = self.ingest_plan(wiki.DEFAULT_FILES)
+                    pages = plan["upsert"]
+                    text = pages[path]
+                    destination = "sources/a.md" if path == "wiki/index.md" else "../../raw/a.txt"
+                    original = "[A]" if path == "wiki/index.md" else "[Source]"
+                    image = {
+                        "inline": f"![Image]({destination})",
+                        "reference": f"![Image][target]\n\n[target]: {destination}",
+                        "shortcut": f"![Image]\n\n[Image]: {destination}",
+                    }[form]
+                    pages[path] = text.replace(f"{original}({destination})", image)
+                    self.assertIn(issue, [item["kind"] for item in self.lint_pages(pages)])
+                    self.remote_commit(wiki.DEFAULT_FILES, plan, error=issue)
+
+    def test_lint_still_checks_image_targets(self):
+        issues = self.lint_pages({
+            "wiki/overview.md": "![Diagram](../raw/assets/missing.png)",
+        })
+        self.assertIn({"kind": "broken_link", "path": "wiki/overview.md",
+                       "target": "../raw/assets/missing.png"}, issues)
+
     def test_commit_allows_preexisting_issues_and_agents_drift(self):
         pages = {**wiki.DEFAULT_FILES, "AGENTS.md": "# Old wording",
                  "wiki/overview.md": "[Broken](missing.md)"}

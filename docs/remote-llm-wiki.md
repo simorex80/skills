@@ -55,7 +55,7 @@ The agent reads relevant pages **at the same commit SHA** and proposes a single 
 
 ### What Lint can prove
 
-These are deterministic checks for the plugin's implementation of the LLM Wiki pattern, not a comprehensive Markdown parser or a guarantee of factual accuracy. Detecting duplicates, outdated decisions and conflicting evidence remains an agent review task; ambiguous conflicts are not silently resolved.
+These are deterministic checks for the plugin's implementation of the LLM Wiki pattern, not a comprehensive Markdown parser or a guarantee of factual accuracy. The index and source summaries need navigable Markdown links; image embeds do not count, but Lint still checks their targets. Detecting duplicates, outdated decisions and conflicting evidence remains an agent review task; ambiguous conflicts are not silently resolved.
 
 If a link points to an existing Markdown file outside the permitted memory paths (such as the repository's `README.md`), the helper checks that the file exists but does not open it. The optional JSON field `unchecked_anchors` lists each such link by `path` and `target`; these entries are not broken links.
 

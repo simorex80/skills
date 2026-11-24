@@ -286,8 +286,9 @@ def _visible_markdown(markdown: str) -> str:
     return "\n".join(lines)
 
 
-def _markdown_targets(markdown: str, *, definitions_from: str = "") -> list[str]:
-    """Find inline and reference links (including images).
+def _markdown_targets(markdown: str, *, definitions_from: str = "",
+                      include_images: bool = True) -> list[str]:
+    """Find inline and reference links, optionally including images.
 
     Not a full CommonMark parser; fenced and inline code are excluded to
     avoid flagging ordinary example syntax as broken links.
@@ -302,9 +303,11 @@ def _markdown_targets(markdown: str, *, definitions_from: str = "") -> list[str]
         definitions[label.casefold().strip()] = angled or plain
     markdown = re.sub(r"(?m)^ {0,3}\[[^\]\n]+\]:[^\n]*", "", markdown)
     targets = []
-    for label, inline, reference in re.findall(
-        r"(?<!\\)!?\[([^\]\n]+)\](?:\((<[^>\n]+>|[^)\n]+)\)|\[([^\]\n]*)\])?", markdown
+    for image, label, inline, reference in re.findall(
+        r"(?<!\\)(!?)\[([^\]\n]+)\](?:\((<[^>\n]+>|[^)\n]+)\)|\[([^\]\n]*)\])?", markdown
     ):
+        if image and not include_images:
+            continue
         if inline:
             target = inline.strip()
             if target.startswith("<") and target.endswith(">"):
@@ -376,7 +379,8 @@ def _local_link(path: str, target: str) -> tuple[str | None, str]:
 
 def _local_targets(path: str, markdown: str, *, definitions_from: str = "") -> set[str]:
     targets = set()
-    for link in _markdown_targets(markdown, definitions_from=definitions_from):
+    for link in _markdown_targets(markdown, definitions_from=definitions_from,
+                                  include_images=False):
         try:
             resolved, _ = _local_link(path, link)
         except ValueError:
