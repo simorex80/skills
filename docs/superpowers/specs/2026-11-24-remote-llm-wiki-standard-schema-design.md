@@ -189,7 +189,8 @@ missing-file, broken-link and anchor checks remain.
   source must append an `ingest` entry.
 - Compute structural issues before and after the plan, by
   `(kind, path, target)`; refuse the commit if it introduces any issue other
-  than `schema_drift`.
+  than `schema_drift`. Each new source must also upsert its paired, valid,
+  indexed summary, even if an orphan summary already existed.
 - Read the recursive tree once per snapshot and fetch page contents by blob
   SHA, not one tree walk per page.
 

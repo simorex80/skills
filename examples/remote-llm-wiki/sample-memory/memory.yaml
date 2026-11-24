@@ -3,6 +3,9 @@ format: llm-wiki
 paths:
   schema: AGENTS.md
   index: wiki/index.md
-  pages: wiki/
-  sources: raw/
   log: wiki/log.md
+  sources: raw/
+  summaries: wiki/sources/
+  entities: wiki/entities/
+  concepts: wiki/concepts/
+  syntheses: wiki/syntheses/

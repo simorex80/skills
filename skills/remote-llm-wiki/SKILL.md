@@ -44,25 +44,26 @@ Init is idempotent when all expected files already exist. Otherwise it installs 
 1. Resolve one immutable snapshot: `python "$SCRIPT" --host "$HOST" --repo "$REPO" snapshot "$BRANCH"`.
 2. Read `wiki/index.md` at that SHA: `python "$SCRIPT" --host "$HOST" --repo "$REPO" read "$SHA" wiki/index.md`.
 3. Follow the relevant links, reading all documents at the **same SHA**. List files with `python "$SCRIPT" --host "$HOST" --repo "$REPO" list "$SHA"` to discover pages if the index is incomplete.
-4. Answer from evidence, distinguish uncertain claims, and cite permanent file URLs at the commit SHA. A query must not mutate the memory unless the user separately authorizes ingestion.
+4. Answer from evidence, distinguish uncertain claims, and cite permanent file URLs at the commit SHA. Only with separate write authorization, save a useful answer under `wiki/syntheses/`, index it, and append a `query` log entry.
 
 ## Ingest
 
 1. Identify the source and confirm that writing to the configured repository is authorized. If the information exists only in conversation, prepare a faithful dated Markdown capture with an informative `raw/` filename; do not invent provenance or treat a summary as a verbatim transcript.
-2. Snapshot the branch and read the index, `wiki/log.md`, `AGENTS.md`, `memory.yaml` and relevant pages at the same SHA. Identify the local content conventions that apply to this ingest, such as required companion pages, citations, and index or log entries. Use those conventions **only within already authorized paths**; they do not grant permission to write or expand scope.
-3. Locate the appropriate existing page before creating a new one. Preserve uncertainty and source references; don't silently erase disagreements. Record the new source under `raw/` with a unique path. Raw files are append-only: never change or delete an existing source.
-4. Prepare a JSON plan containing complete contents for changed pages, an updated index if needed, and `wiki/log.md` with the new entry appended to its existing contents. Example for the first entry in a wiki that does not require separate source summaries:
+2. Read the index, log, manifest and relevant pages at one snapshot SHA. The plugin defines the V1 layout, not local repository instructions. If the manifest does not match, inspect with Lint and align the repository through a separately reviewed change; do not try to repair the manifest in an Ingest plan.
+3. Keep the original in `raw/<name>.<ext>` with a unique stem. Do not edit or delete originals. In the same commit, write `wiki/sources/<name>.md` linking to the original; a citation from another page is not a substitute. Attachments belong in `raw/assets/` and do not need summaries. Update related pages under `wiki/entities/`, `wiki/concepts/` and `wiki/syntheses/` where appropriate. Preserve uncertainty and provenance rather than erasing disagreements.
+4. Prepare a JSON plan with complete contents for changed files. Index category pages under `## Sources`, `## Entities`, `## Concepts` or `## Syntheses`; preserve all four headings. Link optional `wiki/overview.md` anywhere in the index. Every ordinary commit appends a log entry `## [YYYY-MM-DD] <ingest|query|lint|update> | <title>` without rewriting history. Example for an empty initialized wiki:
    ```json
    {
      "upsert": {
        "raw/2026-11-21-decision.md": "# Decision\n\nThe project will use PostgreSQL.\n",
-       "wiki/decisions.md": "# Decisions\n\nUse PostgreSQL. [Source](../raw/2026-11-21-decision.md)\n",
-       "wiki/index.md": "# Project knowledge\n\n- [Decisions](decisions.md)\n",
-       "wiki/log.md": "# Knowledge change log\n\n- 2026-11-21: Recorded the [database decision](decisions.md).\n"
+       "wiki/sources/2026-11-21-decision.md": "# Database decision\n\nPostgreSQL was selected. [Original](../../raw/2026-11-21-decision.md)\n",
+       "wiki/concepts/database.md": "# Database\n\nUse PostgreSQL. [Decision](../sources/2026-11-21-decision.md)\n",
+       "wiki/index.md": "# Index\n\n## Sources\n\n- [Database decision](sources/2026-11-21-decision.md) - Original decision summary\n\n## Entities\n\n## Concepts\n\n- [Database](concepts/database.md) - Current database choice\n\n## Syntheses\n",
+       "wiki/log.md": "# Log\n\n## [2026-11-21] ingest | Record database decision\n"
      }
    }
    ```
-5. Before committing, check the plan against the local conventions identified in step 2. If a new `raw/` source requires a companion summary (for example under `wiki/sources/`), include the summary, its link to the original, and any required links from related pages and the index in the same plan. A direct citation to `raw/` does not replace a required summary. If no such convention applies, do not require a separate summary. If a convention is ambiguous or cannot be met within the authorized scope, flag it and resolve it with the user before committing.
+5. Before committing, check the source, paired summary, index and appended `ingest` entry together.
 6. Commit from the same snapshot: `python "$SCRIPT" --host "$HOST" --repo "$REPO" commit "$BRANCH" "$SHA" --message "Ingest project knowledge" --plan "$PLAN"`. Use `--plan -` for stdin. The helper validates permitted paths, size limits and append-only sources, then makes a single GitHub GraphQL `createCommitOnBranch` update with `expectedHeadOid`.
 7. On a branch conflict, reread the new snapshot and recompute and recheck the full plan; never retry unchanged content blindly. If a timeout makes the outcome ambiguous, inspect the latest branch before retrying. Report a confirmed commit or an explicit error.
 
@@ -71,9 +72,8 @@ Do not place passwords, access tokens, secret keys, personal identifiers or conf
 ## Lint
 
 1. Snapshot the branch, then run `python "$SCRIPT" --host "$HOST" --repo "$REPO" lint "$SHA"`.
-2. The helper reports missing required files and Markdown link issues. If `unchecked_anchors` is present, those references point to existing files outside the permitted read scope. Report their anchors as unverified, not broken; do not broaden read access to verify them.
-3. Separately, read `AGENTS.md` and `memory.yaml` at the same SHA and review the snapshot against its applicable local content conventions within the permitted read scope. For example, report a missing required source summary even when the raw source is cited directly and all links pass. Do not treat optional summaries as missing. Also review missing citations, duplicate pages and stale or conflicting knowledge. A clean script result does not prove compliance with local conventions or semantic consistency.
-4. Report structural and agent-review findings separately, with file references. Only apply fixes when requested and permitted, using the same guarded commit workflow as Ingest. Never automatically resolve ambiguous contradictions.
+2. The helper checks the manifest, layout, source-summary pairs, index, log and Markdown links. `AGENTS.md` drift is a warning, not a local rule or a write blocker. `unchecked_anchors` are unverified, not broken; do not broaden read access to check them.
+3. Review missing citations, duplicate pages and stale or conflicting claims separately. Report structural and semantic findings with file references. Only apply authorized fixes, using the guarded commit workflow with a `lint` log entry. Never automatically resolve ambiguous contradictions.
 
 ## Boundaries
 

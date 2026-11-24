@@ -1,3 +1,5 @@
-# Knowledge change log
+# Log
 
-- 2026-11-21: Captured the synthetic database choice in [architecture decisions](decisions.md), linked to the [original source](../raw/2026-11-21-database-decision.md).
+## [2026-11-21] ingest | Record database decision
+
+Recorded the [database choice](concepts/decisions.md) and its [source summary](sources/2026-11-21-database-decision.md).

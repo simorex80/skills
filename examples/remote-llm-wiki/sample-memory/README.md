@@ -3,7 +3,8 @@
 This is **synthetic sample content** for a fictional project named Atlas. It illustrates the fixed LLM Wiki V1 layout and traceability from curated knowledge to `raw/` evidence. No credentials, private project information or real decisions are included.
 
 - [Knowledge index](wiki/index.md)
-- [Decision page](wiki/decisions.md)
+- [Decision page](wiki/concepts/decisions.md)
+- [Source summary](wiki/sources/2026-11-21-database-decision.md)
 - [Original source](raw/2026-11-21-database-decision.md)
 - [Change log](wiki/log.md)
 - [Memory schema conventions](AGENTS.md)

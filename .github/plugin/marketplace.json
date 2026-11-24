@@ -11,7 +11,7 @@
     {
       "name": "remote-llm-wiki",
       "description": "Shared remote GitHub LLM Wiki memory without cloning.",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "source": "./skills/remote-llm-wiki"
     },
     {

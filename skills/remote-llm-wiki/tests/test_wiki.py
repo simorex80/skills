@@ -6,6 +6,7 @@ import importlib.util
 import hashlib
 import json
 import pathlib
+import re
 import unittest
 from unittest.mock import patch
 
@@ -112,6 +113,12 @@ class WikiTests(unittest.TestCase):
         pages = {**wiki.DEFAULT_FILES, "AGENTS.md": "# Old wording",
                  "wiki/overview.md": "[Broken](missing.md)"}
         self.remote_commit(pages, self.ingest_plan(pages))
+
+    def test_commit_new_source_cannot_reuse_preexisting_invalid_summary(self):
+        pages = {**wiki.DEFAULT_FILES, "wiki/sources/a.md": "# Orphan summary"}
+        plan = self.ingest_plan(pages)
+        plan["upsert"]["wiki/sources/a.md"] = "# Still missing the source link"
+        self.remote_commit(pages, plan, error="invalid_source_summary")
 
     def test_commit_rejects_bad_manifest_or_source_plan(self):
         pages = wiki.DEFAULT_FILES
@@ -222,6 +229,12 @@ class WikiTests(unittest.TestCase):
                "```\n## Not a heading\n```\n")
         self.assertEqual([i["kind"] for i in self.lint_pages({"wiki/log.md": log})],
                          ["invalid_log_entry"] * 3)
+
+    def test_skill_ingest_example_is_a_valid_commit(self):
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        example = re.search(r"```json\n(.*?)```", skill, re.S)
+        self.assertIsNotNone(example)
+        self.remote_commit(wiki.DEFAULT_FILES, json.loads(example[1]))
 
     def test_raw_append_only(self):
         sha = self.backend.get_snapshot("main")

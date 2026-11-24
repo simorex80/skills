@@ -9,10 +9,10 @@ import re
 from pathlib import PurePosixPath
 import subprocess
 import sys
+from collections import Counter
 from collections.abc import Callable
 from datetime import date
 from urllib.parse import quote, unquote, urlsplit
-from collections import Counter
 
 
 MAX_CHANGES = 100
@@ -578,12 +578,12 @@ def _validate_wiki_update(host: str, repo: str, entries: dict[str, str | None], 
     operations = [_log_operation(h) for h in headings[len(old_headings):]]
     if headings[:len(old_headings)] != old_headings or not any(operations):
         raise WikiError("Append a valid entry to wiki/log.md.")
-    new_sources = [name for path in upsert if (name := _source_name(path)) is not None]
-    if new_sources and "ingest" not in operations:
+    new_summaries = {f"wiki/sources/{name}.md" for path in upsert
+                     if (name := _source_name(path)) is not None}
+    if new_summaries and "ingest" not in operations:
         raise WikiError("Append an ingest entry when adding a raw source.")
-    for name in new_sources:
-        if f"wiki/sources/{name}.md" not in upsert:
-            raise WikiError(f"missing_source_summary: include wiki/sources/{name}.md in the change plan.")
+    for path in sorted(new_summaries - upsert.keys()):
+        raise WikiError(f"missing_source_summary: include {path!r} in the change plan.")
 
     projected = (files - delete) | set(upsert)
 
@@ -597,10 +597,13 @@ def _validate_wiki_update(host: str, repo: str, entries: dict[str, str | None], 
             if i["kind"] != "schema_drift"
         )
 
-    introduced = findings(projected, projected_page) - findings(files, page)
-    if introduced:
-        kind, path, target = next(iter(introduced))
-        raise WikiError(f"Change introduces {kind} in {path!r}"
+    after = findings(projected, projected_page)
+    introduced = after - findings(files, page)
+    blocking = next((issue for issue in after
+                     if issue in introduced or issue[1] in new_summaries), None)
+    if blocking:
+        kind, path, target = blocking
+        raise WikiError(f"Change violates the wiki standard: {kind} in {path!r}"
                         + (f" (target: {target!r})." if target is not None else "."))
 
 

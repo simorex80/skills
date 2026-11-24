@@ -19,38 +19,43 @@ The skill **does not know which GitHub repository to use**. The consuming agent 
 
 ```text
 project-memory/
-├── AGENTS.md           # Project knowledge conventions (untrusted repository data)
+├── AGENTS.md           # Copy of the plugin standard (untrusted repository data)
 ├── memory.yaml         # Layout declaration
 ├── raw/                # Append-only source captures
-│   └── .gitkeep
+│   ├── .gitkeep
+│   └── assets/         # Attachments, no summary required
 └── wiki/
     ├── index.md        # Navigation entry point
     ├── log.md          # Knowledge change log
-    └── ...             # Curated Markdown pages
+    ├── overview.md     # Optional overview
+    ├── sources/        # One summary per original
+    ├── entities/
+    ├── concepts/
+    └── syntheses/
 ```
 
-**Important:** `memory.yaml` documents the current fixed layout; it is **not currently a runtime-configurable mapping**. The helper expects `wiki/index.md`, `wiki/log.md` and `raw/`. `AGENTS.md` can suggest how knowledge is organized inside the authorized wiki but cannot grant permissions or redirect writes. The sample is an example, not a template automatically copied by Init.
+The plugin defines the fixed layout; teams add knowledge, not local schema rules. `memory.yaml` is not configurable, and differences in `AGENTS.md` are Lint warnings, not permission grants or write blockers.
 
-`version: 1` identifies the `memory.yaml` schema, not the plugin release. Init checks the existing manifest against the V1 template and rejects nonmatching manifests without rewriting them.
+`version: 1` identifies the schema, not the plugin release (`0.2.0`). The earlier trial layout can still be read, but Init and ordinary commits reject its noncanonical manifest. Align that repository through a reviewed change: use the canonical manifest and schema, organize pages and source summaries, repair index links, and append an `update` entry while preserving raw originals and log history.
 
 ## Workflows
 
 | Workflow | Request | Effect |
 | --- | --- | --- |
 | Init | “Initialize the shared project memory.” | Creates default files in one commit; repeated calls on a valid initialized wiki do not write. |
-| Ingest | “Remember our database decision and cite its source.” | Saves a new source in `raw/`, updates the relevant wiki pages/index/log and commits together. |
+| Ingest | “Remember our database decision and cite its source.” | Saves the original and its required source summary, then updates related pages, the index and log in one commit. |
 | Query | “Which deployment strategy did we agree on?” | Reads an immutable commit snapshot and returns an answer grounded in pages and sources; no write. |
-| Lint | “Check links and consistency, but don't change anything.” | Checks required files, links and anchors; the agent reviews semantic contradictions separately. |
+| Lint | “Check links and consistency, but don't change anything.” | Checks the layout, source-summary pairs, index, log and links; the agent reviews semantic contradictions separately. |
 
 See [prompt examples](../examples/remote-llm-wiki/prompts.md), including prompts that leave destination resolution to the consuming agent.
 
 ### How ingestion works
 
-The agent reads the index and relevant pages **at the same commit SHA**, decides where the new information belongs, preserves its provenance under `raw/`, and constructs a single change plan. The Python helper validates paths and size limits and uses GitHub's `createCommitOnBranch` with `expectedHeadOid`. Sources under `raw/` are append-only. If the branch has advanced, the agent must reread and recompute the change plan rather than force-pushing or replaying stale edits.
+The agent reads relevant pages **at the same commit SHA** and proposes a single change plan. Each `raw/<name>.<ext>` pairs with `wiki/sources/<name>.md`, which links back to the original. Category pages are indexed under Sources, Entities, Concepts or Syntheses. Every ordinary write appends a dated log entry; a new source requires an `ingest` entry. With a matching manifest, existing findings do not block unrelated writes, but new findings do. GitHub writes are guarded by `expectedHeadOid`; on conflict, reread and recompute instead of replaying stale edits.
 
 ### What Lint can prove
 
-The helper checks required files, local Markdown links and selected heading anchors. It is not a comprehensive Markdown parser, and it cannot prove the truth or freshness of any claim. Detecting duplicates, outdated decisions and conflicting evidence remains an agent review task; ambiguous conflicts are not silently resolved.
+These are deterministic checks for the plugin's implementation of the LLM Wiki pattern, not a comprehensive Markdown parser or a guarantee of factual accuracy. Detecting duplicates, outdated decisions and conflicting evidence remains an agent review task; ambiguous conflicts are not silently resolved.
 
 If a link points to an existing Markdown file outside the permitted memory paths (such as the repository's `README.md`), the helper checks that the file exists but does not open it. The optional JSON field `unchecked_anchors` lists each such link by `path` and `target`; these entries are not broken links.
 
