@@ -12,7 +12,7 @@ Expected: create the default layout once in a repository whose branch already ha
 
 > Remember that we chose PostgreSQL as the primary database. This supersedes our earlier MongoDB proposal. Record the date and provenance, update the existing architecture page if appropriate, and keep the previous decision traceable.
 
-Expected: new immutable source capture, updated curated page and log, with an index change if a new page is created. Do not invent reasons the user did not supply.
+Expected: new immutable source capture, a matching `wiki/sources/` page with a link to the original, updated curated pages and index, and an appended `ingest` log entry. Do not invent reasons the user did not supply.
 
 ## Consult the memory (Query)
 

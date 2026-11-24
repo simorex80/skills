@@ -15,9 +15,12 @@ SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "wiki.py"
 HOST = "github.com"
 
 
-def gh(*arguments: str) -> str:
+def gh(*arguments: str, payload: dict | None = None) -> str:
+    command = ["gh", "api", "--hostname", HOST, *arguments]
+    if payload is not None:
+        command.extend(("--input", "-"))
     result = subprocess.run(
-        ["gh", "api", "--hostname", HOST, *arguments],
+        command, input=json.dumps(payload) if payload is not None else None,
         capture_output=True, text=True, timeout=90, check=False,
     )
     if result.returncode:
@@ -34,7 +37,8 @@ def wiki_call(repo: str, *arguments: str, stdin: str | None = None, ok: bool = T
         raise AssertionError(f"wiki {arguments[0]} failed: {result.stderr[:600]}")
     if not ok and result.returncode == 0:
         raise AssertionError(f"wiki {arguments[0]} unexpectedly succeeded")
-    return result.stdout.strip() if ok else result.stderr.strip()
+    return result.stdout if ok and arguments[0] == "read" else (
+        result.stdout.strip() if ok else result.stderr.strip())
 
 
 def main() -> None:
@@ -46,15 +50,24 @@ def main() -> None:
         raise RuntimeError("Expected GITHUB_RUN_ID for an isolated test branch.")
     branch = f"ci-wiki-{run_id}"
     base_sha = json.loads(gh(f"repos/{repo}/git/ref/heads/main"))["object"]["sha"]
+    # Seed without inheriting the default branch's trial-era memory.
+    tree = json.loads(gh("--method", "POST", f"repos/{repo}/git/trees",
+                         payload={"tree": [{"path": "README.md", "type": "blob",
+                                            "mode": "100644", "content": "Disposable wiki test\n"}]}))["sha"]
+    seed = json.loads(gh("--method", "POST", f"repos/{repo}/git/commits",
+                         payload={"message": "Seed disposable wiki test",
+                                  "tree": tree, "parents": [base_sha]}))["sha"]
     created = False
     try:
         gh("--method", "POST", f"repos/{repo}/git/refs", "-f", f"ref=refs/heads/{branch}",
-           "-f", f"sha={base_sha}")
+           "-f", f"sha={seed}")
         created = True
 
-        # Existing-memory initialization must be idempotent.
+        fresh = json.loads(wiki_call(repo, "init", branch))
+        if fresh["status"] != "initialized":
+            raise AssertionError(f"Unexpected fresh init outcome: {fresh}")
         initialized = json.loads(wiki_call(repo, "init", branch))
-        if initialized["status"] != "already_initialized":
+        if initialized["status"] != "already_initialized" or initialized["sha"] != fresh["oid"]:
             raise AssertionError(f"Unexpected init outcome: {initialized}")
 
         original = wiki_call(repo, "snapshot", branch)
@@ -67,9 +80,9 @@ def main() -> None:
         plan = {
             "upsert": {
                 f"raw/{branch}.md": "# Synthetic test source\n\nNo production data.\n",
-                f"wiki/{branch}.md": f"# Test\n\n[Source](../raw/{branch}.md)\n",
-                "wiki/index.md": index + f"\n- [CI test]({branch}.md)\n",
-                "wiki/log.md": log + f"\n- Synthetic run {run_id}.\n",
+                f"wiki/sources/{branch}.md": f"# Test\n\n[Source](../../raw/{branch}.md)\n",
+                "wiki/index.md": index.replace("## Sources\n", f"## Sources\n\n- [CI test](sources/{branch}.md)\n"),
+                "wiki/log.md": log + f"\n## [2026-11-24] ingest | Synthetic run {run_id}\n",
             }
         }
         outcome = json.loads(wiki_call(
@@ -89,7 +102,7 @@ def main() -> None:
         # The old expected HEAD must be rejected, not automatically retried.
         error = wiki_call(
             repo, "commit", branch, original, "--message", "Stale write",
-            "--plan", "-", stdin=json.dumps({"upsert": {"wiki/stale.md": "# Stale"}}),
+            "--plan", "-", stdin=json.dumps(plan),
             ok=False,
         )
         if "advanced" not in error.lower():
