@@ -76,6 +76,8 @@ python -m unittest discover -s tests -v
 
 The unit and regression tests run without GitHub credentials or an installed MarkItDown converter. [GitHub Actions](.github/workflows/skill-tests.yml) separately installs MarkItDown and document-generation dependencies to run real converter integration smoke tests across its supported Python versions.
 
+Plugin behavior is tested in `skills/<name>/tests/`. The root `tests/` suite covers repository-wide contracts: marketplace metadata, shared skill documentation requirements, and public examples under `examples/`.
+
 The [skill distribution workflow](.github/workflows/skills-distribution.yml) checks the root plugin manifest, discovers every `skills/*/SKILL.md`, and verifies standalone installation with the current skills CLI on relevant PRs, main branch changes, and weekly. It installs into a disposable directory with telemetry disabled; these are compatibility checks, not catalog registration or synthetic download events.
 
 To **attempt** skills.sh indexing manually, open **Actions → Skill distribution → Run workflow**, select `main`, enable **request_indexing**, and run it. This makes one additional installation from the public GitHub repository with telemetry suppression flags disabled. GitHub Actions is still a CI environment, so skills.sh may disregard the event; neither a green workflow nor this input guarantees catalog listing. Leave the option unchecked for routine checks. Do not schedule indexing requests.

@@ -144,8 +144,12 @@ class TestConvert(unittest.TestCase):
             with self.assertRaisesRegex(converter.ConversionError, "workspace"):
                 converter.convert(self.workspace, self.source.name, "link/out.md")
 
+    def test_relative_destination_escape_rejected(self):
+        with self.assertRaisesRegex(converter.ConversionError, "workspace"):
+            converter.destination_path(self.workspace, "../leak.md")
+
     def test_remote_and_unsupported_sources_rejected(self):
-        for name in ("https://example.com/test.pdf", "file:///tmp/test.pdf", "//server/file.pdf",
+        for name in ("https://example.invalid/test.pdf", "file:///tmp/test.pdf", "//server/file.pdf",
                      r"\\server\share\a.pdf", "x://example.com/test.pdf"):
             with self.subTest(name=name):
                 with self.assertRaisesRegex(converter.ConversionError, "Only local"):
