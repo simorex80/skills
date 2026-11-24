@@ -36,7 +36,7 @@ project-memory/
 
 The plugin defines the fixed layout; teams add knowledge, not local schema rules. `memory.yaml` is not configurable, and differences in `AGENTS.md` are Lint warnings, not permission grants or write blockers.
 
-`version: 1` identifies the schema, not the plugin release (`0.2.0`). The earlier trial layout can still be read, but Init and ordinary commits reject its noncanonical manifest. Align that repository through a reviewed change: use the canonical manifest and schema, organize pages and source summaries, repair index links, and append an `update` entry while preserving raw originals and log history.
+`version: 1` identifies the schema, not the plugin version. The earlier trial layout can still be read, but Init and ordinary commits reject its noncanonical manifest. Align that repository through a reviewed change: use the canonical manifest and schema, organize pages and source summaries, repair index links, and append an `update` entry while preserving raw originals and log history.
 
 ## Workflows
 
