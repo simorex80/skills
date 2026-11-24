@@ -79,6 +79,25 @@ class WikiTests(unittest.TestCase):
         self.assertIn({"kind": "schema_drift", "path": "AGENTS.md", "severity": "warning"},
                       self.lint_pages({"AGENTS.md": "# Old wording"}))
 
+    def test_index_rules(self):
+        pages = {"wiki/overview.md": "# Overview", "wiki/concepts/a.md": "# A"}
+        index = wiki.DEFAULT_FILES["wiki/index.md"].replace("## Sources\n", "## Sources\n[A](concepts/a.md)\n")
+        index += "[Overview](overview.md)\n"
+        self.assertIn("unindexed_page", [i["kind"] for i in self.lint_pages({**pages, "wiki/index.md": index})])
+        index = index.replace("## Concepts\n", "## Concepts\n[A][a]\n[A](concepts/a.md)\n")
+        index += "\n[a]: concepts/a.md\n"
+        self.assertEqual(self.lint_pages({**pages, "wiki/index.md": index}), [])
+        self.assertIn("invalid_index", [i["kind"] for i in self.lint_pages(
+            {"wiki/index.md": index.replace("## Entities", "## Other"), **pages})])
+
+    def test_log_entry_format(self):
+        log = ("# Log\n\n## [2026-02-28] update | Valid\n"
+               "## [2026-02-30] ingest | Bad date\n"
+               "## [2026-02-28] other | Bad op\n## [2026-02-28] query | \n"
+               "```\n## Not a heading\n```\n")
+        self.assertEqual([i["kind"] for i in self.lint_pages({"wiki/log.md": log})],
+                         ["invalid_log_entry"] * 3)
+
     def test_raw_append_only(self):
         sha = self.backend.get_snapshot("main")
         self.backend.commit("main", sha, "add source",
@@ -229,7 +248,8 @@ class WikiTests(unittest.TestCase):
 
     def test_lint_heading_anchor_uses_visible_link_text(self):
         pages = {**wiki.DEFAULT_FILES, "wiki/index.md":
-                 "# [Project](https://example.com)\n\n[Jump](#project)\n"}
+                 wiki.DEFAULT_FILES["wiki/index.md"].replace(
+                     "# Index", "# [Project](https://example.com)\n\n[Jump](#project)")}
         with patch.object(wiki, "list_files", return_value=list(pages)), \
              patch.object(wiki, "read_file", side_effect=lambda h, r, sha, p: pages[p]):
             result = wiki.lint_memory("github.com", "o/r", "a" * 40)
@@ -252,7 +272,7 @@ class WikiTests(unittest.TestCase):
              patch.object(wiki, "read_file", side_effect=lambda h, r, sha, p: pages[p]) as read:
             result = wiki.lint_memory("github.com", "o/r", "a" * 40)
         self.assertNotIn("README.md", [call.args[3] for call in read.call_args_list])
-        self.assertEqual(result["issues"], [
+        self.assertEqual([i for i in result["issues"] if "severity" not in i], [
             {"kind": "broken_link", "path": "wiki/index.md", "target": "missing.md"},
         ])
         self.assertEqual(result["unchecked_anchors"], [
@@ -264,7 +284,7 @@ class WikiTests(unittest.TestCase):
         with patch.object(wiki, "list_files", return_value=list(pages)), \
              patch.object(wiki, "read_file", side_effect=lambda h, r, sha, p: pages[p]):
             result = wiki.lint_memory("github.com", "o/r", "a" * 40)
-        self.assertEqual(result["issues"], [
+        self.assertEqual([i for i in result["issues"] if "severity" not in i], [
             {"kind": "broken_link", "path": "wiki/index.md", "target": "../README.md#setup"},
         ])
         self.assertNotIn("unchecked_anchors", result)

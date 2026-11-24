@@ -10,6 +10,7 @@ from pathlib import PurePosixPath
 import subprocess
 import sys
 from collections.abc import Callable
+from datetime import date
 from urllib.parse import quote, unquote, urlsplit
 
 
@@ -254,18 +255,32 @@ def init_memory(host: str, repo: str, branch: str) -> dict:
     return {"status": "initialized", **commit(host, repo, branch, sha, "Initialize LLM Wiki", plan, bootstrap=True)}
 
 
-def _markdown_targets(markdown: str) -> list[str]:
+def _without_fences(markdown: str) -> str:
+    fence = ""
+    lines = []
+    for line in markdown.splitlines():
+        marker = re.match(r"^ {0,3}(`{3,}|~{3,})(.*)$", line)
+        if not fence and marker:
+            fence = marker[1]
+        elif fence and marker and marker[1].startswith(fence) and not marker[2].strip():
+            fence = ""
+        elif not fence:
+            lines.append(line)
+    return "\n".join(lines)
+
+
+def _markdown_targets(markdown: str, *, definitions_from: str = "") -> list[str]:
     """Find local inline and full/collapsed reference links (including images).
 
     Not a full CommonMark parser; fenced and inline code are excluded to
     avoid flagging ordinary example syntax as broken links.
     """
-    markdown = re.sub(r"(?ms)^\s*```[^\n]*\n.*?^\s*```[^\n]*$", "", markdown)
+    markdown = _without_fences(markdown)
     markdown = re.sub(r"`[^`\n]*`", "", markdown)
     definitions = {}
     for label, angled, plain in re.findall(
         r"(?m)^\s{0,3}\[([^\]]+)\]:\s*(?:<([^>]+)>|(\S+))",
-        markdown,
+        _without_fences(definitions_from) if definitions_from else markdown,
     ):
         definitions[label.casefold().strip()] = angled or plain
     targets = []
@@ -338,9 +353,9 @@ def _local_link(path: str, target: str) -> tuple[str | None, str]:
     return "/".join(parts), unquote(parsed.fragment)
 
 
-def _local_targets(path: str, markdown: str) -> set[str]:
+def _local_targets(path: str, markdown: str, *, definitions_from: str = "") -> set[str]:
     targets = set()
-    for link in _markdown_targets(markdown):
+    for link in _markdown_targets(markdown, definitions_from=definitions_from):
         try:
             resolved, _ = _local_link(path, link)
         except ValueError:
@@ -348,6 +363,46 @@ def _local_targets(path: str, markdown: str) -> set[str]:
         if resolved is not None:
             targets.add(resolved)
     return targets
+
+
+def _log_headings(markdown: str) -> list[str]:
+    return re.findall(r"(?m)^ {0,3}##[ \t]+(.*)$", _without_fences(markdown))
+
+
+def _log_operation(heading: str) -> str | None:
+    match = re.fullmatch(r"\[([0-9]{4}-[0-9]{2}-[0-9]{2})\] (ingest|query|lint|update) \| (\S.*)", heading)
+    if not match:
+        return None
+    try:
+        date.fromisoformat(match[1])
+    except ValueError:
+        return None
+    return match[2]
+
+
+def _index_issues(files: set[str], index: str) -> list[dict[str, str]]:
+    path = "wiki/index.md"
+    sections: dict[str, set[str]] = {}
+    # Only level-two headings define categories; level-one headings end them.
+    chunks = re.split(r"(?m)^( {0,3}#{1,2})[ \t]+(.*)$", _without_fences(index))
+    for marker, title, body in zip(chunks[1::3], chunks[2::3], chunks[3::3]):
+        if marker.strip() == "##" and title.strip() in SECTIONS.values():
+            sections.setdefault(title.strip(), set()).update(
+                _local_targets(path, body, definitions_from=index))
+    issues = [{"kind": "invalid_index", "path": path, "target": title, "severity": "error"}
+              for title in SECTIONS.values() if title not in sections]
+    all_targets = _local_targets(path, index)
+    for page_path in sorted(files):
+        category = _category(page_path)
+        if category:
+            targets = sections.get(SECTIONS[category], set())
+        elif page_path == "wiki/overview.md":
+            targets = all_targets
+        else:
+            continue
+        if page_path not in targets:
+            issues.append({"kind": "unindexed_page", "path": page_path, "severity": "error"})
+    return issues
 
 
 def structural_issues(files: set[str], page: Callable[[str], str]) -> list[dict[str, str]]:
@@ -385,6 +440,13 @@ def structural_issues(files: set[str], page: Callable[[str], str]) -> list[dict[
         linked = _local_targets(path, page(path)) & eligible
         if len(originals) != 1 or linked != set(originals):
             issues.append({"kind": "invalid_source_summary", "path": path, "severity": "error"})
+    if "wiki/index.md" in files:
+        issues.extend(_index_issues(files, page("wiki/index.md")))
+    if "wiki/log.md" in files:
+        issues.extend({"kind": "invalid_log_entry", "path": "wiki/log.md",
+                       "target": heading, "severity": "error"}
+                      for heading in _log_headings(page("wiki/log.md"))
+                      if _log_operation(heading) is None)
     return issues
 
 
