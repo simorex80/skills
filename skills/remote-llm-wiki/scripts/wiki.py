@@ -12,6 +12,7 @@ import sys
 from collections.abc import Callable
 from datetime import date
 from urllib.parse import quote, unquote, urlsplit
+from collections import Counter
 
 
 MAX_CHANGES = 100
@@ -119,12 +120,12 @@ def wiki_path(value: str, *, writable: bool = False) -> str:
         or any(ord(char) < 32 or ord(char) == 127 for char in value)
     ):
         raise WikiError("Use a canonical repository-relative path.")
-    if value.startswith("wiki/") and value.lower().endswith(".md"):
+    if writable:
+        if value not in {"AGENTS.md", "memory.yaml", "raw/.gitkeep"} and _standard_path(value):
+            return value
+    elif (value.startswith("wiki/") and value.lower().endswith(".md")
+          or value.startswith("raw/") or value in {"AGENTS.md", "memory.yaml"}):
         return value
-    if not writable and (value.startswith("raw/") or value in {"AGENTS.md", "memory.yaml"}):
-        return value
-    if writable and value.startswith("raw/"):
-        return value  # Append-only rule is enforced against the snapshot.
     raise WikiError("Path is outside the permitted memory files.")
 
 
@@ -177,7 +178,7 @@ def read_file(host: str, repo: str, sha: str, path: str) -> str:
     return gh_api(host, [f"{endpoint}/blobs/{object_sha}", "-H", "Accept: application/vnd.github.raw+json"])
 
 
-def list_files(host: str, repo: str, sha: str) -> list[str]:
+def _snapshot_entries(host: str, repo: str, sha: str) -> dict[str, str | None]:
     """Get a complete recursive tree anchored at the supplied commit."""
     endpoint = f"repos/{repo}/git"
     commit_obj = json.loads(gh_api(host, [f"{endpoint}/commits/{sha}"]))
@@ -185,11 +186,15 @@ def list_files(host: str, repo: str, sha: str) -> list[str]:
     tree = json.loads(gh_api(host, [f"{endpoint}/trees/{tree_sha}?recursive=1"]))
     if tree.get("truncated"):
         raise WikiError("Repository tree is truncated: cannot safely inspect the memory.")
-    result = []
-    for item in tree["tree"]:
-        if item.get("type") == "blob" and item.get("mode") in {"100644", "100755"}:
-            result.append(item["path"])
-    return sorted(result)
+    return {
+        item["path"]: (parse_sha(item["sha"]) if item.get("type") == "blob"
+                       and item.get("mode") in {"100644", "100755"} else None)
+        for item in tree["tree"]
+    }
+
+
+def list_files(host: str, repo: str, sha: str) -> list[str]:
+    return sorted(path for path, oid in _snapshot_entries(host, repo, sha).items() if oid)
 
 
 def validate_plan(plan: object, existing: set[str], *, bootstrap: bool = False) -> None:
@@ -450,19 +455,10 @@ def structural_issues(files: set[str], page: Callable[[str], str]) -> list[dict[
     return issues
 
 
-def lint_memory(host: str, repo: str, sha: str) -> dict:
-    files = set(list_files(host, repo, sha))
+def _link_issues(files: set[str], page: Callable[[str], str]) -> tuple[list[dict], list[dict]]:
+    problems = []
     unchecked_anchors = []
-    markdown_files = sorted(p for p in files if p.startswith("wiki/") and p.lower().endswith(".md"))
-    cache: dict[str, str] = {}
-
-    def page(path: str) -> str:
-        if path not in cache:
-            cache[path] = read_file(host, repo, sha, path)
-        return cache[path]
-
-    problems = structural_issues(files, page)
-    for path in markdown_files:
+    for path in _wiki_pages(files):
         for original in _markdown_targets(page(path)):
             try:
                 resolved, fragment = _local_link(path, original)
@@ -483,8 +479,26 @@ def lint_memory(host: str, repo: str, sha: str) -> dict:
                     continue
                 if fragment.casefold() not in _heading_anchors(page(resolved)):
                     problems.append({"kind": "broken_anchor", "path": path, "target": original})
-    result = {"sha": sha, "files_checked": len(markdown_files),
-              "issues": problems,
+    return problems, unchecked_anchors
+
+
+def _wiki_pages(files: set[str]) -> list[str]:
+    return sorted(p for p in files if p.startswith("wiki/") and p.lower().endswith(".md"))
+
+
+def lint_memory(host: str, repo: str, sha: str) -> dict:
+    files = set(list_files(host, repo, sha))
+    cache: dict[str, str] = {}
+
+    def page(path: str) -> str:
+        if path not in cache:
+            cache[path] = read_file(host, repo, sha, path)
+        return cache[path]
+
+    problems = structural_issues(files, page)
+    link_problems, unchecked_anchors = _link_issues(files, page)
+    result = {"sha": sha, "files_checked": len(_wiki_pages(files)),
+              "issues": problems + link_problems,
               "semantic_review_required": True}
     if unchecked_anchors:
         result["unchecked_anchors"] = unchecked_anchors
@@ -532,10 +546,75 @@ def file_changes(plan: object, *, bootstrap: bool = False) -> dict[str, list[dic
     return changes
 
 
+def _validate_wiki_update(host: str, repo: str, entries: dict[str, str | None], plan: dict) -> None:
+    files = {path for path, oid in entries.items() if oid is not None}
+    upsert = plan.get("upsert", {})
+    delete = set(plan.get("delete", []))
+    cache: dict[str, str] = {}
+
+    def page(path: str) -> str:
+        wiki_path(path)
+        oid = entries[path]
+        if oid not in cache:
+            cache[oid] = gh_api(host, [f"repos/{repo}/git/blobs/{oid}",
+                                       "-H", "Accept: application/vnd.github.raw+json"])
+        return cache[oid]
+
+    if "memory.yaml" not in files or not matches_default("memory.yaml", page("memory.yaml")):
+        raise WikiError("memory.yaml differs from the supported V1 schema. "
+                        "Run Lint and align the repository through a reviewed change.")
+    if any(path in entries and path not in files for path in {*upsert, *delete}):
+        raise WikiError("Cannot replace or delete a non-regular file or directory.")
+
+    log_path = "wiki/log.md"
+    previous_log = page(log_path) if log_path in files else ""
+    next_log = upsert.get(log_path, "")
+    if (not next_log.startswith(previous_log)
+            or previous_log and not previous_log.endswith("\n")
+            and not next_log[len(previous_log):].startswith(("\n", "\r\n"))):
+        raise WikiError("wiki/log.md is append-only; preserve its exact previous content.")
+    old_headings = _log_headings(previous_log)
+    headings = _log_headings(next_log)
+    operations = [_log_operation(h) for h in headings[len(old_headings):]]
+    if headings[:len(old_headings)] != old_headings or not any(operations):
+        raise WikiError("Append a valid entry to wiki/log.md.")
+    new_sources = [name for path in upsert if (name := _source_name(path)) is not None]
+    if new_sources and "ingest" not in operations:
+        raise WikiError("Append an ingest entry when adding a raw source.")
+    for name in new_sources:
+        if f"wiki/sources/{name}.md" not in upsert:
+            raise WikiError(f"missing_source_summary: include wiki/sources/{name}.md in the change plan.")
+
+    projected = (files - delete) | set(upsert)
+
+    def projected_page(path: str) -> str:
+        return upsert[path] if path in upsert else page(path)
+
+    def findings(paths: set[str], read: Callable[[str], str]) -> Counter:
+        return Counter(
+            (i["kind"], i["path"], i.get("target"))
+            for i in structural_issues(paths, read) + _link_issues(paths, read)[0]
+            if i["kind"] != "schema_drift"
+        )
+
+    introduced = findings(projected, projected_page) - findings(files, page)
+    if introduced:
+        kind, path, target = next(iter(introduced))
+        raise WikiError(f"Change introduces {kind} in {path!r}"
+                        + (f" (target: {target!r})." if target is not None else "."))
+
+
 def commit(host: str, repo: str, branch: str, sha: str, message: str, plan: object, *, bootstrap: bool = False) -> dict:
     if not message.strip() or "\n" in message or "\r" in message:
         raise WikiError("Provide a single-line commit message.")
-    validate_plan(plan, set(list_files(host, repo, sha)), bootstrap=bootstrap)
+    entries = _snapshot_entries(host, repo, sha)
+    validate_plan(plan, set(entries), bootstrap=bootstrap)
+    if bootstrap:
+        if any(path in DEFAULT_FILES or path.startswith(("wiki/", "raw/"))
+               or path in {"wiki", "raw"} for path in entries):
+            raise WikiError("Partial memory exists; refusing to overwrite it.")
+    else:
+        _validate_wiki_update(host, repo, entries, plan)
     changes = file_changes(plan, bootstrap=bootstrap)
     if snapshot(host, repo, branch) != sha:
         raise WikiError("Branch advanced. Read a new snapshot and recompute the changes.")

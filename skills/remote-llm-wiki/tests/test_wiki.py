@@ -3,6 +3,7 @@
 Run: python -m unittest discover -s skills/remote-llm-wiki/tests -v
 """
 import importlib.util
+import hashlib
 import json
 import pathlib
 import unittest
@@ -49,6 +50,130 @@ class FakeBackend:
 class WikiTests(unittest.TestCase):
     def setUp(self):
         self.backend = FakeBackend()
+
+    def remote_commit(self, pages, plan, *, error=None, stale=False):
+        prefix = "repos/org/memory/git/"
+        sha, tree_sha = self.backend.head, "c" * 40
+        blobs = {hashlib.sha1(text.encode()).hexdigest(): text for text in pages.values()}
+        tree = [{"path": p, "type": "blob", "mode": "100644",
+                 "sha": hashlib.sha1(t.encode()).hexdigest()} for p, t in pages.items()]
+        responses = {
+            prefix + f"commits/{sha}": json.dumps({"tree": {"sha": tree_sha}}),
+            prefix + f"trees/{tree_sha}?recursive=1": json.dumps({"tree": tree, "truncated": False}),
+            prefix + "ref/heads/main": "d" * 40 if stale else sha,
+            **{prefix + "blobs/" + oid: text for oid, text in blobs.items()},
+        }
+        calls, mutations = [], []
+
+        def gh(host, args, payload=None):
+            self.assertEqual(host, "github.com")
+            calls.append(args[0])
+            if args[0] == "graphql":
+                mutations.append(payload["variables"]["input"])
+                return json.dumps({"data": {"createCommitOnBranch": {"commit": {
+                    "oid": "b" * 40, "url": "https://github.com/example/commit",
+                }}}})
+            return responses[args[0]]
+
+        with patch.object(wiki, "gh_api", side_effect=gh):
+            if error:
+                try:
+                    wiki.commit("github.com", "org/memory", "main", sha, "Test commit", plan)
+                except wiki.WikiError as exc:
+                    self.assertRegex(str(exc).lower(), error)
+                else:
+                    self.fail("Invalid plan was accepted")
+                self.assertEqual(mutations, [])
+                return
+            result = wiki.commit("github.com", "org/memory", "main", sha, "Test commit", plan)
+        self.assertEqual(result["oid"], "b" * 40)
+        self.assertEqual(len(mutations), 1)
+        self.assertEqual(mutations[0]["expectedHeadOid"], sha)
+        self.assertEqual(mutations[0]["branch"], {
+            "repositoryNameWithOwner": "org/memory", "branchName": "main",
+        })
+        self.assertEqual([call for call in calls if "/trees/" in call],
+                         [prefix + f"trees/{tree_sha}?recursive=1"])
+        reads = [call for call in calls if "/blobs/" in call]
+        self.assertEqual(len(reads), len(set(reads)))
+
+    def ingest_plan(self, pages):
+        return {"upsert": {
+            "raw/a.txt": "Original",
+            "wiki/sources/a.md": "[Source](../../raw/a.txt)\n",
+            "wiki/index.md": pages["wiki/index.md"].replace("## Sources\n", "## Sources\n[A](sources/a.md)\n"),
+            "wiki/log.md": pages["wiki/log.md"] + "\n## [2026-11-24] ingest | A\n",
+        }}
+
+    def test_commit_valid_ingest_reads_tree_once(self):
+        self.remote_commit(wiki.DEFAULT_FILES, self.ingest_plan(wiki.DEFAULT_FILES))
+
+    def test_commit_allows_preexisting_issues_and_agents_drift(self):
+        pages = {**wiki.DEFAULT_FILES, "AGENTS.md": "# Old wording",
+                 "wiki/overview.md": "[Broken](missing.md)"}
+        self.remote_commit(pages, self.ingest_plan(pages))
+
+    def test_commit_rejects_bad_manifest_or_source_plan(self):
+        pages = wiki.DEFAULT_FILES
+        upserts = self.ingest_plan(pages)["upsert"]
+        log = upserts["wiki/log.md"]
+        for changes, error in (
+            ({"raw/a.txt": "Original", "wiki/log.md": log}, "missing_source_summary"),
+            ({**upserts, "wiki/sources/a.md": "# Missing backlink"}, "invalid_source_summary"),
+            ({**upserts, "wiki/index.md": pages["wiki/index.md"]}, "unindexed_page"),
+            ({"raw/nested/a.txt": "Original", "wiki/log.md": log}, "permitted"),
+            ({"AGENTS.md": "# Local", "wiki/log.md": log}, "permitted"),
+            ({"memory.yaml": "version: 1", "wiki/log.md": log}, "permitted"),
+        ):
+            with self.subTest(error=error, paths=changes.keys()):
+                self.remote_commit(pages, {"upsert": changes}, error=error)
+        self.remote_commit({**pages, "memory.yaml": "version: 1\n"},
+                           {"upsert": upserts}, error="v1 schema")
+
+    def test_commit_rejects_invalid_log_changes(self):
+        pages = {**wiki.DEFAULT_FILES, "wiki/log.md": "# Log\n\n## [2026-11-23] update | Old\n"}
+        old = pages["wiki/log.md"]
+        for log, error in ((None, "append"), ("# Log\n", "append"),
+                           (old + "## [2026-11-24] update | A\n", "ingest"),
+                           (old + "## [2026-02-30] ingest | Bad\n", "append"),
+                           (old + "```\n## [2026-11-24] ingest | In code\n", "append"),
+                           (old + "## [2026-11-24] ingest | Valid\n## Bad\n", "invalid_log_entry")):
+            with self.subTest(log=log):
+                plan = self.ingest_plan(pages)
+                if log is None:
+                    del plan["upsert"]["wiki/log.md"]
+                else:
+                    plan["upsert"]["wiki/log.md"] = log
+                self.remote_commit(pages, plan, error=error)
+
+    def test_commit_rejects_summary_deletion_and_unindexing(self):
+        pages = {**wiki.DEFAULT_FILES, **self.ingest_plan(wiki.DEFAULT_FILES)["upsert"]}
+        log = pages["wiki/log.md"] + "\n## [2026-11-24] update | Cleanup\n"
+        self.remote_commit(pages, {"upsert": {"wiki/log.md": log,
+                                               "wiki/index.md": wiki.DEFAULT_FILES["wiki/index.md"]},
+                                   "delete": ["wiki/sources/a.md"]}, error="missing_source_summary")
+        self.remote_commit(pages, {"upsert": {"wiki/log.md": log,
+                                               "wiki/index.md": wiki.DEFAULT_FILES["wiki/index.md"]}},
+                           error="unindexed_page")
+        self.remote_commit(pages, {"upsert": {"wiki/log.md": log}, "delete": ["wiki/sources/a.md"]},
+                           error="broken_link|missing_source_summary")
+        self.remote_commit(pages, {"upsert": {"wiki/log.md": log, "wiki/overview.md": "# Overview"}},
+                           error="unindexed_page")
+
+    def test_commit_allows_merging_pages_and_adding_attachment(self):
+        index = wiki.DEFAULT_FILES["wiki/index.md"].replace("## Concepts\n", "## Concepts\n[A](concepts/a.md)\n")
+        pages = {**wiki.DEFAULT_FILES, "wiki/index.md": index, "wiki/concepts/a.md": "# A"}
+        plan = {"upsert": {
+            "wiki/index.md": index.replace("concepts/a.md", "concepts/b.md"),
+            "wiki/concepts/b.md": "# B",
+            "raw/assets/exhibit.txt": "An attachment",
+            "wiki/log.md": "# Log\n\n## [2026-11-24] update | Merge A into B\n",
+        }, "delete": ["wiki/concepts/a.md"]}
+        self.remote_commit(pages, plan)
+
+    def test_commit_rejects_stale_snapshot_before_mutating(self):
+        self.remote_commit(wiki.DEFAULT_FILES, self.ingest_plan(wiki.DEFAULT_FILES),
+                           error="advanced", stale=True)
 
     def lint_pages(self, additions):
         pages = {**wiki.DEFAULT_FILES, **additions}
@@ -109,7 +234,7 @@ class WikiTests(unittest.TestCase):
     def test_stale_snapshot_rejected(self):
         old = self.backend.head
         self.backend.commit("main", old, "first",
-                            {"upsert": {"wiki/a.md": "# A"}})
+                            {"upsert": {"wiki/concepts/a.md": "# A"}})
         with self.assertRaisesRegex(wiki.WikiError, "advanced"):
             self.backend.commit("main", old, "second",
                                 {"upsert": {"wiki/b.md": "# B"}})
@@ -125,7 +250,7 @@ class WikiTests(unittest.TestCase):
     def test_reject_oversize(self):
         with self.assertRaisesRegex(wiki.WikiError, "size limit"):
             wiki.validate_plan(
-                {"upsert": {"wiki/huge.md": "x" * (wiki.MAX_FILE_BYTES + 1)}},
+                {"upsert": {"wiki/concepts/huge.md": "x" * (wiki.MAX_FILE_BYTES + 1)}},
                 set())
 
     def test_bootstrap_can_create_manifest(self):
@@ -288,20 +413,6 @@ class WikiTests(unittest.TestCase):
             {"kind": "broken_link", "path": "wiki/index.md", "target": "../README.md#setup"},
         ])
         self.assertNotIn("unchecked_anchors", result)
-
-    def test_graphql_branch_name_payload(self):
-        sha = "a" * 40
-        response = {"data": {"createCommitOnBranch": {"commit": {
-            "oid": "b" * 40, "url": "https://github.com/example/commit"
-        }}}}
-        with patch.object(wiki, "list_files", return_value=[]), \
-             patch.object(wiki, "snapshot", return_value=sha), \
-             patch.object(wiki, "gh_api", return_value=json.dumps(response)) as api:
-            wiki.commit("github.com", "org/memory", "main", sha,
-                        "Test commit", {"upsert": {"wiki/test.md": "# Test"}})
-        branch = api.call_args.args[2]["variables"]["input"]["branch"]
-        self.assertEqual(branch, {"repositoryNameWithOwner": "org/memory",
-                                  "branchName": "main"})
 
     def test_markdown_link_lint(self):
         files = {"wiki/index.md", "wiki/a.md", *wiki.DEFAULT_FILES.keys()}
