@@ -43,7 +43,8 @@ These instructions govern agents and contributors **maintaining this repository*
 
 - **Discover** skill directories dynamically from `skills/*/SKILL.md`. Validate that marketplace entries match them one-to-one and that each skill's manifests and frontmatter agree.
 - The distribution workflow checks catalog structure, the official Claude validator, and skills CLI discovery/install. These are structural/distribution checks, **not** proof of each skill's behavior or full client installation.
-- Run repository-wide regression tests using `python -m unittest discover -s tests -v` if Python is available. This command validates shared repository contracts, not every skill runtime.
+- Keep root `tests/` for shared repository contracts, such as marketplace metadata, plugin discovery, and common documentation requirements. These tests may inspect plugin metadata and documentation, but must not import or execute plugin code. Run them with `python -m unittest discover -s tests -v` if Python is available.
+- Put tests that import or execute plugin code in that plugin's `skills/<name>/tests/` directory, even when they exercise a public example from `examples/`.
 - Run the **affected skill's documented test commands** and relevant integration/smoke tests. For Python skills with `tests/`, use the documented interpreter and `python -m unittest discover -s skills/<name>/tests -v` when that directory uses unittest. Compile Python source when applicable. For non-Python skills, use their own test runner and CI job.
 - Keep existing skill-specific CI matrices and integration coverage unless explicitly migrated to an equivalent or stronger approach. Ensure every **new** skill gets corresponding behavioral CI; do not infer universal Python compatibility.
 - Keep indexing/telemetry requests manual and opt-in. Do not trigger them during validation or routine PR checks.

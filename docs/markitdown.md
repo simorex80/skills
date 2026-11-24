@@ -22,17 +22,19 @@ Supported extensions in this wrapper: `.pdf`, `.docx`, `.pptx`, `.xlsx`, `.html`
 
 **Extract:** use for analysis; prints UTF-8 Markdown to standard output without leaving a persistent file. The helper creates and removes a temporary Markdown file during conversion.
 
+For large extractions (up to 4 MiB), use bounded tool output and read the complete capture in ranges if available. Use a persistent Markdown destination only when requested, and disclose any gaps if only partial output is available.
+
 ```sh
 python skills/markitdown/scripts/convert.py extract report.pdf
 ```
 
-**Convert:** create a named `.md` file and print its path in UTF-8. Existing destinations are never overwritten.
+**Convert:** create a named `.md` file and print its path in UTF-8. Existing destinations are never overwritten. On filesystems without hard links, the converter creates the file exclusively, so concurrent readers may briefly see partial content.
 
 ```sh
 python skills/markitdown/scripts/convert.py convert report.pdf --output report.md
 ```
 
-**Batch:** process supported files from a workspace directory, with per-file error reporting. The JSON summary is UTF-8, and its relative paths use `/` on every platform. Add `--recursive` only when requested.
+**Batch:** process supported files from a workspace directory, with per-file error reporting. The UTF-8 JSON summary always includes `converted`, `skipped` and `failed`, with relative paths using `/` on every platform. Add `--recursive` only when requested. To resume, add `--skip-existing`: existing destinations are listed under `skipped` without being modified or checked for freshness. Without the flag, they count as failures.
 
 ```sh
 python skills/markitdown/scripts/convert.py batch documents --output-dir converted --recursive
@@ -52,4 +54,4 @@ MarkItDown runs with the agent's OS privileges. The worker's Linux resource limi
 python -m unittest discover -s skills/markitdown/tests -v
 ```
 
-These are offline unit tests, using mocks rather than the installed Microsoft converter. CI separately installs MarkItDown and runs real converter smoke tests on representative PDF, DOCX, PPTX, XLSX and HTML fixtures. See [the workflow](../.github/workflows/skill-tests.yml).
+These are offline unit tests, using mocks rather than the installed Microsoft converter. CI separately installs MarkItDown and runs real converter smoke tests covering all supported extensions, single-file publication, and batch resume. See [the workflow](../.github/workflows/skill-tests.yml).
