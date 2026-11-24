@@ -93,8 +93,20 @@ class WikiTests(unittest.TestCase):
              patch.object(wiki, "commit", return_value={"oid": "b" * 40}) as commit:
             result = wiki.init_memory("github.com", "org/repo", "main")
         self.assertEqual(result["status"], "initialized")
-        self.assertEqual(commit.call_args.args[5]["upsert"]["memory.yaml"].splitlines()[0],
-                         "version: 1")
+        files = commit.call_args.args[5]["upsert"]
+        self.assertEqual(set(files), {"AGENTS.md", "memory.yaml", "wiki/index.md",
+                                      "wiki/log.md", "raw/.gitkeep"})
+        self.assertEqual(files["memory.yaml"], (
+            "version: 1\nformat: llm-wiki\npaths:\n  schema: AGENTS.md\n"
+            "  index: wiki/index.md\n  log: wiki/log.md\n  sources: raw/\n"
+            "  summaries: wiki/sources/\n  entities: wiki/entities/\n"
+            "  concepts: wiki/concepts/\n  syntheses: wiki/syntheses/\n"
+        ))
+        self.assertEqual(files["wiki/index.md"],
+                         "# Index\n\n## Sources\n\n## Entities\n\n## Concepts\n\n## Syntheses\n")
+        self.assertEqual(files["wiki/log.md"], "# Log\n")
+        self.assertEqual(files["raw/.gitkeep"], "")
+        self.assertIn("Teams add knowledge, not rules.", files["AGENTS.md"])
 
     def test_regular_ingest_cannot_modify_manifest(self):
         with self.assertRaises(wiki.WikiError):
@@ -113,10 +125,11 @@ class WikiTests(unittest.TestCase):
         with self.assertRaisesRegex(wiki.WikiError, "Duplicate"):
             wiki.validate_plan({"delete": ["wiki/a.md", "wiki/a.md"]}, {"wiki/a.md"})
 
-    def test_init_rejects_incompatible_manifest(self):
+    def test_init_rejects_trial_manifest_with_same_version(self):
         existing = list(wiki.DEFAULT_FILES)
-        v2_manifest = "version: 2\n" + wiki.DEFAULT_FILES["memory.yaml"].split("\n", 1)[1]
-        for manifest in (v2_manifest, "invalid manifest"):
+        trial = ("version: 1\nformat: llm-wiki\npaths:\n  schema: AGENTS.md\n"
+                 "  index: wiki/index.md\n  pages: wiki/\n  sources: raw/\n  log: wiki/log.md\n")
+        for manifest in (trial, "invalid manifest"):
             with self.subTest(manifest=manifest), \
                  patch.object(wiki, "snapshot", return_value="a" * 40), \
                  patch.object(wiki, "list_files", return_value=existing), \
@@ -125,6 +138,25 @@ class WikiTests(unittest.TestCase):
                 with self.assertRaisesRegex(wiki.WikiError, "V1 schema"):
                     wiki.init_memory("github.com", "org/repo", "main")
                 commit.assert_not_called()
+
+    def test_init_noop_with_agents_drift(self):
+        pages = {**wiki.DEFAULT_FILES, "AGENTS.md": "",
+                 "memory.yaml": wiki.DEFAULT_FILES["memory.yaml"].replace("\n", "\r\n")}
+        with patch.object(wiki, "snapshot", return_value=self.backend.head), \
+             patch.object(wiki, "list_files", return_value=list(pages)), \
+             patch.object(wiki, "read_file", side_effect=lambda h, r, sha, p: pages[p]), \
+             patch.object(wiki, "commit") as commit:
+            result = wiki.init_memory("github.com", "org/repo", "main")
+        self.assertEqual(result["status"], "already_initialized")
+        commit.assert_not_called()
+
+    def test_init_never_overwrites_partial_memory(self):
+        with patch.object(wiki, "snapshot", return_value=self.backend.head), \
+             patch.object(wiki, "list_files", return_value=["wiki/index.md"]), \
+             patch.object(wiki, "commit") as commit:
+            with self.assertRaisesRegex(wiki.WikiError, "Partial"):
+                wiki.init_memory("github.com", "org/repo", "main")
+        commit.assert_not_called()
 
     def test_lint_rejects_links_escaping_repository(self):
         files = set(wiki.DEFAULT_FILES)
