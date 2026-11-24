@@ -76,7 +76,7 @@ python -m unittest discover -s tests -v
 
 The unit and regression tests run without GitHub credentials or an installed MarkItDown converter. [GitHub Actions](.github/workflows/skill-tests.yml) separately installs MarkItDown and document-generation dependencies to run real converter integration smoke tests across its supported Python versions.
 
-Plugin behavior is tested in `skills/<name>/tests/`. The root `tests/` suite covers repository-wide contracts: marketplace metadata, shared skill documentation requirements, and public examples under `examples/`.
+The root `tests/` suite checks marketplace metadata and shared skill documentation requirements without importing plugin code. Tests that exercise plugin code live in `skills/<name>/tests/`, including the Remote LLM Wiki check for its public example in the source checkout.
 
 The [skill distribution workflow](.github/workflows/skills-distribution.yml) checks the root plugin manifest, discovers every `skills/*/SKILL.md`, and verifies standalone installation with the current skills CLI on relevant PRs, main branch changes, and weekly. It installs into a disposable directory with telemetry disabled; these are compatibility checks, not catalog registration or synthetic download events.
 
