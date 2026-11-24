@@ -55,9 +55,12 @@ class WikiTests(unittest.TestCase):
     def remote_commit(self, pages, plan, *, error=None, stale=False):
         prefix = "repos/org/memory/git/"
         sha, tree_sha = self.backend.head, "c" * 40
-        blobs = {hashlib.sha1(text.encode()).hexdigest(): text for text in pages.values()}
+        def oid(text):
+            return hashlib.sha1(text.encode() if isinstance(text, str) else text).hexdigest()
+
+        blobs = {oid(text): text for text in pages.values()}
         tree = [{"path": p, "type": "blob", "mode": "100644",
-                 "sha": hashlib.sha1(t.encode()).hexdigest()} for p, t in pages.items()]
+                 "sha": oid(t)} for p, t in pages.items()]
         responses = {
             prefix + f"commits/{sha}": json.dumps({"tree": {"sha": tree_sha}}),
             prefix + f"trees/{tree_sha}?recursive=1": json.dumps({"tree": tree, "truncated": False}),
@@ -74,7 +77,8 @@ class WikiTests(unittest.TestCase):
                 return json.dumps({"data": {"createCommitOnBranch": {"commit": {
                     "oid": "b" * 40, "url": "https://github.com/example/commit",
                 }}}})
-            return responses[args[0]]
+            response = responses[args[0]]
+            return response.decode("utf-8") if isinstance(response, bytes) else response
 
         with patch.object(wiki, "gh_api", side_effect=gh):
             if error:
@@ -114,6 +118,17 @@ class WikiTests(unittest.TestCase):
                  "wiki/overview.md": "[Broken](missing.md)"}
         self.remote_commit(pages, self.ingest_plan(pages))
 
+    def test_commit_allows_unrelated_legacy_encoding(self):
+        pages = {**wiki.DEFAULT_FILES, "wiki/overview.md": "# Overview".encode("utf-16")}
+        self.remote_commit(pages, self.ingest_plan(pages))
+
+    def test_commit_detects_dangling_shortcut_reference(self):
+        pages = {**wiki.DEFAULT_FILES, "wiki/overview.md": "See [A].\n\n[A]: concepts/a.md\n",
+                 "wiki/concepts/a.md": "# A\n"}
+        self.remote_commit(pages, {"delete": ["wiki/concepts/a.md"], "upsert": {
+            "wiki/log.md": "# Log\n\n## [2026-11-24] update | Delete A\n",
+        }}, error="broken_link")
+
     def test_commit_new_source_cannot_reuse_preexisting_invalid_summary(self):
         pages = {**wiki.DEFAULT_FILES, "wiki/sources/a.md": "# Orphan summary"}
         plan = self.ingest_plan(pages)
@@ -143,6 +158,7 @@ class WikiTests(unittest.TestCase):
         for log, error in ((None, "append"), ("# Log\n", "append"),
                            (old + "## [2026-11-24] update | A\n", "ingest"),
                            (old + "## [2026-02-30] ingest | Bad\n", "append"),
+                           (old + "<!--\n## [2026-11-24] ingest | Hidden\n-->\n", "append"),
                            (old + "```\n## [2026-11-24] ingest | In code\n", "append"),
                            (old + "## [2026-11-24] ingest | Valid\n## Bad\n", "invalid_log_entry")):
             with self.subTest(log=log):
@@ -221,6 +237,19 @@ class WikiTests(unittest.TestCase):
         self.assertEqual(self.lint_pages({**pages, "wiki/index.md": index}), [])
         self.assertIn("invalid_index", [i["kind"] for i in self.lint_pages(
             {"wiki/index.md": index.replace("## Entities", "## Other"), **pages})])
+        hidden = wiki.DEFAULT_FILES["wiki/index.md"].replace(
+            "## Concepts\n", "## Concepts\n<!--\n[A](concepts/a.md)\n-->\n")
+        self.assertIn("unindexed_page", [i["kind"] for i in self.lint_pages(
+            {"wiki/index.md": hidden, "wiki/concepts/a.md": "# A"})])
+
+    def test_source_summary_can_cite_another_original(self):
+        index = wiki.DEFAULT_FILES["wiki/index.md"].replace(
+            "## Sources\n", "## Sources\n[A](sources/a.md)\n[B](sources/b.md)\n")
+        self.assertEqual(self.lint_pages({
+            "wiki/index.md": index, "raw/a.txt": "A", "raw/b.txt": "B",
+            "wiki/sources/a.md": "[Original](../../raw/a.txt) [Context](../../raw/b.txt)",
+            "wiki/sources/b.md": "[Original](../../raw/b.txt)",
+        }), [])
 
     def test_log_entry_format(self):
         log = ("# Log\n\n## [2026-02-28] update | Valid\n"

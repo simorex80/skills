@@ -260,46 +260,62 @@ def init_memory(host: str, repo: str, branch: str) -> dict:
     return {"status": "initialized", **commit(host, repo, branch, sha, "Initialize LLM Wiki", plan, bootstrap=True)}
 
 
-def _without_fences(markdown: str) -> str:
+def _visible_markdown(markdown: str) -> str:
     fence = ""
+    in_comment = False
     lines = []
-    for line in markdown.splitlines():
-        marker = re.match(r"^ {0,3}(`{3,}|~{3,})(.*)$", line)
-        if not fence and marker:
+    for line in markdown.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        marker = None if in_comment else re.match(r"^ {0,3}(`{3,}|~{3,})(.*)$", line)
+        if fence:
+            if marker and marker[1].startswith(fence) and not marker[2].strip():
+                fence = ""
+            continue
+        if marker:
             fence = marker[1]
-        elif fence and marker and marker[1].startswith(fence) and not marker[2].strip():
-            fence = ""
-        elif not fence:
-            lines.append(line)
+            continue
+        visible = []
+        while line:
+            before, delimiter, after = line.partition("-->" if in_comment else "<!--")
+            if not in_comment:
+                visible.append(before)
+            if not delimiter:
+                break
+            in_comment = not in_comment
+            line = after
+        lines.append("".join(visible))
     return "\n".join(lines)
 
 
 def _markdown_targets(markdown: str, *, definitions_from: str = "") -> list[str]:
-    """Find local inline and full/collapsed reference links (including images).
+    """Find inline and reference links (including images).
 
     Not a full CommonMark parser; fenced and inline code are excluded to
     avoid flagging ordinary example syntax as broken links.
     """
-    markdown = _without_fences(markdown)
+    markdown = _visible_markdown(markdown)
     markdown = re.sub(r"`[^`\n]*`", "", markdown)
     definitions = {}
     for label, angled, plain in re.findall(
         r"(?m)^\s{0,3}\[([^\]]+)\]:\s*(?:<([^>]+)>|(\S+))",
-        _without_fences(definitions_from) if definitions_from else markdown,
+        _visible_markdown(definitions_from) if definitions_from else markdown,
     ):
         definitions[label.casefold().strip()] = angled or plain
+    markdown = re.sub(r"(?m)^ {0,3}\[[^\]\n]+\]:[^\n]*", "", markdown)
     targets = []
-    for target in re.findall(r"!?\[[^\]]+\]\((<[^>]+>|[^)]+)\)", markdown):
-        target = target.strip()
-        if target.startswith("<") and target.endswith(">"):
-            target = target[1:-1]
-        elif " \"" in target:
-            target = target.split(" \"", 1)[0]
-        targets.append(target)
-    for label, reference in re.findall(r"!?\[([^\]]+)\]\[([^\]]*)\]", markdown):
-        key = (reference or label).casefold().strip()
-        if key in definitions:
-            targets.append(definitions[key])
+    for label, inline, reference in re.findall(
+        r"(?<!\\)!?\[([^\]\n]+)\](?:\((<[^>\n]+>|[^)\n]+)\)|\[([^\]\n]*)\])?", markdown
+    ):
+        if inline:
+            target = inline.strip()
+            if target.startswith("<") and target.endswith(">"):
+                target = target[1:-1]
+            elif " \"" in target:
+                target = target.split(" \"", 1)[0]
+            targets.append(target)
+        else:
+            key = (reference or label).casefold().strip()
+            if key in definitions:
+                targets.append(definitions[key])
     return targets
 
 
@@ -307,7 +323,7 @@ def _heading_anchors(markdown: str) -> set[str]:
     """Approximate GitHub Markdown heading slugs for ordinary headings."""
     used: dict[str, int] = {}
     anchors: set[str] = set()
-    for heading in re.findall(r"(?m)^#{1,6}\s+(.+?)\s*#*\s*$", markdown):
+    for heading in re.findall(r"(?m)^#{1,6}\s+(.+?)\s*#*\s*$", _visible_markdown(markdown)):
         title = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", heading)
         slug = re.sub(r"[^\w\- ]", "", title.casefold()).replace(" ", "-")
         index = used.get(slug, 0)
@@ -371,7 +387,7 @@ def _local_targets(path: str, markdown: str, *, definitions_from: str = "") -> s
 
 
 def _log_headings(markdown: str) -> list[str]:
-    return re.findall(r"(?m)^ {0,3}##[ \t]+(.*)$", _without_fences(markdown))
+    return re.findall(r"(?m)^ {0,3}##[ \t]+(.*)$", _visible_markdown(markdown))
 
 
 def _log_operation(heading: str) -> str | None:
@@ -389,7 +405,7 @@ def _index_issues(files: set[str], index: str) -> list[dict[str, str]]:
     path = "wiki/index.md"
     sections: dict[str, set[str]] = {}
     # Only level-two headings define categories; level-one headings end them.
-    chunks = re.split(r"(?m)^( {0,3}#{1,2})[ \t]+(.*)$", _without_fences(index))
+    chunks = re.split(r"(?m)^( {0,3}#{1,2})[ \t]+(.*)$", _visible_markdown(index))
     for marker, title, body in zip(chunks[1::3], chunks[2::3], chunks[3::3]):
         if marker.strip() == "##" and title.strip() in SECTIONS.values():
             sections.setdefault(title.strip(), set()).update(
@@ -439,11 +455,9 @@ def structural_issues(files: set[str], page: Callable[[str], str]) -> list[dict[
             for path in originals:
                 issues.append({"kind": "missing_source_summary", "path": path,
                                "target": f"wiki/sources/{name}.md", "severity": "error"})
-    eligible = {path for originals in sources.values() for path in originals}
     for name, path in summaries.items():
         originals = sources.get(name, [])
-        linked = _local_targets(path, page(path)) & eligible
-        if len(originals) != 1 or linked != set(originals):
+        if len(originals) != 1 or originals[0] not in _local_targets(path, page(path)):
             issues.append({"kind": "invalid_source_summary", "path": path, "severity": "error"})
     if "wiki/index.md" in files:
         issues.extend(_index_issues(files, page("wiki/index.md")))
@@ -486,6 +500,25 @@ def _wiki_pages(files: set[str]) -> list[str]:
     return sorted(p for p in files if p.startswith("wiki/") and p.lower().endswith(".md"))
 
 
+def _inspect(files: set[str], read: Callable[[str], str]) -> tuple[list[dict], list[dict]]:
+    unreadable = set()
+
+    def page(path: str) -> str:
+        if path not in unreadable:
+            try:
+                return read(path)
+            except UnicodeDecodeError:
+                unreadable.add(path)
+        return ""
+
+    structural = structural_issues(files, page)
+    links, unchecked = _link_issues(files, page)
+    issues = [i for i in structural + links if i["path"] not in unreadable]
+    issues.extend({"kind": "invalid_encoding", "path": path, "severity": "error"}
+                  for path in sorted(unreadable))
+    return issues, unchecked
+
+
 def lint_memory(host: str, repo: str, sha: str) -> dict:
     files = set(list_files(host, repo, sha))
     cache: dict[str, str] = {}
@@ -495,10 +528,9 @@ def lint_memory(host: str, repo: str, sha: str) -> dict:
             cache[path] = read_file(host, repo, sha, path)
         return cache[path]
 
-    problems = structural_issues(files, page)
-    link_problems, unchecked_anchors = _link_issues(files, page)
+    problems, unchecked_anchors = _inspect(files, page)
     result = {"sha": sha, "files_checked": len(_wiki_pages(files)),
-              "issues": problems + link_problems,
+              "issues": problems,
               "semantic_review_required": True}
     if unchecked_anchors:
         result["unchecked_anchors"] = unchecked_anchors
@@ -550,15 +582,23 @@ def _validate_wiki_update(host: str, repo: str, entries: dict[str, str | None], 
     files = {path for path, oid in entries.items() if oid is not None}
     upsert = plan.get("upsert", {})
     delete = set(plan.get("delete", []))
-    cache: dict[str, str] = {}
+    cache: dict[str, str | UnicodeDecodeError] = {}
 
     def page(path: str) -> str:
         wiki_path(path)
         oid = entries[path]
+        if oid is None:
+            raise WikiError("Cannot read a non-regular file.")
         if oid not in cache:
-            cache[oid] = gh_api(host, [f"repos/{repo}/git/blobs/{oid}",
-                                       "-H", "Accept: application/vnd.github.raw+json"])
-        return cache[oid]
+            try:
+                cache[oid] = gh_api(host, [f"repos/{repo}/git/blobs/{oid}",
+                                          "-H", "Accept: application/vnd.github.raw+json"])
+            except UnicodeDecodeError as exc:
+                cache[oid] = exc
+        content = cache[oid]
+        if isinstance(content, UnicodeDecodeError):
+            raise content
+        return content
 
     if "memory.yaml" not in files or not matches_default("memory.yaml", page("memory.yaml")):
         raise WikiError("memory.yaml differs from the supported V1 schema. "
@@ -593,7 +633,7 @@ def _validate_wiki_update(host: str, repo: str, entries: dict[str, str | None], 
     def findings(paths: set[str], read: Callable[[str], str]) -> Counter:
         return Counter(
             (i["kind"], i["path"], i.get("target"))
-            for i in structural_issues(paths, read) + _link_issues(paths, read)[0]
+            for i in _inspect(paths, read)[0]
             if i["kind"] != "schema_drift"
         )
 

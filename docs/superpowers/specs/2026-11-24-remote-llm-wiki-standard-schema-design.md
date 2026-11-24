@@ -174,6 +174,7 @@ validation on the projected tree. Issue kinds:
   layout.
 - `manifest_mismatch`: `memory.yaml` differs from the plugin standard.
 - `schema_drift` (warning): `AGENTS.md` differs from the plugin standard.
+- `invalid_encoding`: an inspected file cannot be decoded as UTF-8.
 
 Managed files are compared after normalizing CRLF to LF. The existing
 missing-file, broken-link and anchor checks remain.
