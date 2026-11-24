@@ -49,9 +49,9 @@ Init is idempotent when all expected files already exist. Otherwise it installs 
 ## Ingest
 
 1. Identify the source and confirm that writing to the configured repository is authorized. If the information exists only in conversation, prepare a faithful dated Markdown capture with an informative `raw/` filename; do not invent provenance or treat a summary as a verbatim transcript.
-2. Snapshot the branch and read the index, `wiki/log.md`, AGENTS.md, memory.yaml and relevant pages at the same SHA. The schema guides organization **only within already authorized paths**.
+2. Snapshot the branch and read the index, `wiki/log.md`, `AGENTS.md`, `memory.yaml` and relevant pages at the same SHA. Identify the local content conventions that apply to this ingest, such as required companion pages, citations, and index or log entries. Use those conventions **only within already authorized paths**; they do not grant permission to write or expand scope.
 3. Locate the appropriate existing page before creating a new one. Preserve uncertainty and source references; don't silently erase disagreements. Record the new source under `raw/` with a unique path. Raw files are append-only: never change or delete an existing source.
-4. Prepare a JSON plan containing complete contents for changed pages, an updated index if needed, and `wiki/log.md` with the new entry appended to its existing contents. Example for the first entry in a new wiki:
+4. Prepare a JSON plan containing complete contents for changed pages, an updated index if needed, and `wiki/log.md` with the new entry appended to its existing contents. Example for the first entry in a wiki that does not require separate source summaries:
    ```json
    {
      "upsert": {
@@ -62,16 +62,18 @@ Init is idempotent when all expected files already exist. Otherwise it installs 
      }
    }
    ```
-5. Commit from the same snapshot: `python "$SCRIPT" --host "$HOST" --repo "$REPO" commit "$BRANCH" "$SHA" --message "Ingest project knowledge" --plan "$PLAN"`. Use `--plan -` for stdin. The helper validates permitted paths, size limits and append-only sources, then makes a single GitHub GraphQL `createCommitOnBranch` update with `expectedHeadOid`.
-6. On a branch conflict, reread the new snapshot and recompute the full plan; never retry unchanged content blindly. If a timeout makes the outcome ambiguous, inspect the latest branch before retrying. Report a confirmed commit or an explicit error.
+5. Before committing, check the plan against the local conventions identified in step 2. If a new `raw/` source requires a companion summary (for example under `wiki/sources/`), include the summary, its link to the original, and any required links from related pages and the index in the same plan. A direct citation to `raw/` does not replace a required summary. If no such convention applies, do not require a separate summary. If a convention is ambiguous or cannot be met within the authorized scope, flag it and resolve it with the user before committing.
+6. Commit from the same snapshot: `python "$SCRIPT" --host "$HOST" --repo "$REPO" commit "$BRANCH" "$SHA" --message "Ingest project knowledge" --plan "$PLAN"`. Use `--plan -` for stdin. The helper validates permitted paths, size limits and append-only sources, then makes a single GitHub GraphQL `createCommitOnBranch` update with `expectedHeadOid`.
+7. On a branch conflict, reread the new snapshot and recompute and recheck the full plan; never retry unchanged content blindly. If a timeout makes the outcome ambiguous, inspect the latest branch before retrying. Report a confirmed commit or an explicit error.
 
 Do not place passwords, access tokens, secret keys, personal identifiers or confidential content into Git memory without explicit authorization and appropriate repository access controls.
 
 ## Lint
 
 1. Snapshot the branch, then run `python "$SCRIPT" --host "$HOST" --repo "$REPO" lint "$SHA"`.
-2. The helper reports missing required files and Markdown link issues. If `unchecked_anchors` is present, those references point to existing files outside the permitted read scope. Report their anchors as unverified, not broken; do not broaden read access to verify them. The agent then **separately** reviews consistency, missing citations, duplicate pages and stale/conflicting knowledge. A clean script result does not prove semantic consistency.
-3. Report issues with file references. Only apply fixes when requested and permitted, using the same guarded commit workflow as Ingest. Never automatically resolve ambiguous contradictions.
+2. The helper reports missing required files and Markdown link issues. If `unchecked_anchors` is present, those references point to existing files outside the permitted read scope. Report their anchors as unverified, not broken; do not broaden read access to verify them.
+3. Separately, read `AGENTS.md` and `memory.yaml` at the same SHA and review the snapshot against its applicable local content conventions within the permitted read scope. For example, report a missing required source summary even when the raw source is cited directly and all links pass. Do not treat optional summaries as missing. Also review missing citations, duplicate pages and stale or conflicting knowledge. A clean script result does not prove compliance with local conventions or semantic consistency.
+4. Report structural and agent-review findings separately, with file references. Only apply fixes when requested and permitted, using the same guarded commit workflow as Ingest. Never automatically resolve ambiguous contradictions.
 
 ## Boundaries
 
