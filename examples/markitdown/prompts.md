@@ -32,7 +32,7 @@ Expected: a qualitative overview based on the extracted representation. **For pr
 
 > Use markitdown to convert all supported documents from `documents/` into `converted/`, including subdirectories. Report how many succeeded and list failed files with their errors.
 
-Expected: a recursive batch and a per-file summary. The output directory must remain inside the workspace but **outside** the input directory. Existing destinations are not overwritten. Successful outputs remain even if another file fails. The current batch limit is 100 supported files.
+Expected: a recursive batch and a per-file summary with converted, skipped and failed counts. The output directory must remain inside the workspace but **outside** the input directory. Existing destinations are not overwritten. Successful outputs remain even if another file fails. Ask to resume with `--skip-existing` to report existing destinations as skipped instead of failed. The current batch limit is 100 supported files.
 
 ## Read a document and update shared project memory (composed workflow)
 

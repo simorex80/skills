@@ -7,9 +7,11 @@ The worker imports Microsoft's MarkItDown Python API in a timeout-controlled pro
 from __future__ import annotations
 
 import argparse
+import errno
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -28,7 +30,9 @@ class ConversionError(Exception):
 
 
 def local_path(value: str) -> Path:
-    if not value or value.startswith(("//", "\\\\")) or re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", value) and os.name != "nt":
+    scheme = re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", value)
+    windows_drive = os.name == "nt" and scheme and scheme.end() == 2 and not value[2:].startswith("//")
+    if not value or value.replace("\\", "/").startswith("//") or (scheme and not windows_drive):
         raise ConversionError("Only local filesystem paths are supported.")
     return Path(value)
 
@@ -73,7 +77,8 @@ def _run_worker(source: Path, temporary: Path, timeout: int) -> None:
     if temporary.stat().st_size > MAX_OUTPUT_BYTES:
         raise ConversionError(f"Markdown exceeds {MAX_OUTPUT_BYTES} byte limit.")
     if not temporary.read_text(encoding="utf-8").strip():
-        raise ConversionError("Empty Markdown (the source may require OCR).")
+        hint = " (the source may require OCR)" if source.suffix.lower() == ".pdf" else ""
+        raise ConversionError(f"Empty Markdown{hint}.")
 
 
 def _limit_worker_resources() -> None:
@@ -119,26 +124,87 @@ def extract(workspace: Path, source_value: str, timeout: int = DEFAULT_TIMEOUT) 
         return temporary.read_text(encoding="utf-8")
 
 
+def _remove_empty_parents(created: list[Path]) -> None:
+    for path in reversed(created):
+        try:
+            path.rmdir()
+        except OSError:
+            break
+
+
+def _create_parents(directory: Path) -> list[Path]:
+    missing = []
+    while not directory.exists():
+        missing.append(directory)
+        directory = directory.parent
+    created = []
+    try:
+        for path in reversed(missing):
+            try:
+                path.mkdir()
+            except FileExistsError:
+                if not path.is_dir():
+                    raise
+            else:
+                created.append(path)
+    except BaseException:
+        _remove_empty_parents(created)
+        raise
+    return created
+
+
+def _publish(temporary: Path, destination: Path) -> None:
+    try:
+        os.link(temporary, destination)
+        return
+    except FileExistsError as exc:
+        raise ConversionError(f"Destination already exists: {destination}.") from exc
+    except OSError as exc:
+        if not isinstance(exc, PermissionError) and exc.errno not in (
+            errno.ENOSYS, errno.ENOTSUP, errno.EOPNOTSUPP
+        ) and getattr(exc, "winerror", None) not in (1, 50):
+            raise
+
+    with temporary.open("rb") as source:
+        try:
+            output = destination.open("xb")
+        except FileExistsError as exc:
+            raise ConversionError(f"Destination already exists: {destination}.") from exc
+        identity = None
+        try:
+            with output:
+                identity = os.fstat(output.fileno())
+                shutil.copyfileobj(source, output)
+        except BaseException:
+            try:
+                if identity is not None and os.path.samestat(identity, destination.lstat()):
+                    destination.unlink()
+            except FileNotFoundError:
+                pass
+            raise
+
+
 def convert(workspace: Path, source_value: str, destination_value: str | None = None,
             timeout: int = DEFAULT_TIMEOUT) -> Path:
     source = source_path(workspace, source_value)
     destination = destination_path(workspace, destination_value or str(source.with_suffix(".md")))
     if os.path.lexists(destination):
         raise ConversionError(f"Destination already exists: {destination}.")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination = destination_path(workspace, str(destination))
-    with TemporaryDirectory(prefix=".markitdown-", dir=destination.parent) as directory:
-        temporary = Path(directory) / "result.md"
-        _run_worker(source, temporary, timeout)
-        try:
-            os.link(temporary, destination)
-        except FileExistsError as exc:
-            raise ConversionError(f"Destination already exists: {destination}.") from exc
+    created = _create_parents(destination.parent)
+    try:
+        destination = destination_path(workspace, str(destination))
+        with TemporaryDirectory(prefix=".markitdown-", dir=destination.parent) as directory:
+            temporary = Path(directory) / "result.md"
+            _run_worker(source, temporary, timeout)
+            _publish(temporary, destination)
+    except BaseException:
+        _remove_empty_parents(created)
+        raise
     return destination
 
 
 def batch(workspace: Path, input_dir: str, output_dir: str, *, recursive: bool = False,
-          timeout: int = DEFAULT_TIMEOUT) -> dict:
+          timeout: int = DEFAULT_TIMEOUT, skip_existing: bool = False) -> dict:
     directory = (workspace / local_path(input_dir)).resolve(strict=True)
     if not directory.is_relative_to(workspace) or not directory.is_dir():
         raise ConversionError("Input directory must be inside the workspace.")
@@ -163,11 +229,14 @@ def batch(workspace: Path, input_dir: str, output_dir: str, *, recursive: bool =
         destinations[target] = entry
     if len(sources) > MAX_BATCH_FILES:
         raise ConversionError(f"Batch exceeds {MAX_BATCH_FILES} file limit.")
-    summary: dict = {"converted": [], "failed": []}
+    summary: dict = {"converted": [], "skipped": [], "failed": []}
     for entry in sources:
         relative = entry.relative_to(directory)
         destination = target_root / relative.with_suffix(".md")
         try:
+            if skip_existing and os.path.lexists(destination_path(workspace, str(destination))):
+                summary["skipped"].append(destination.relative_to(workspace).as_posix())
+                continue
             path = convert(workspace, str(entry), str(destination), timeout)
             summary["converted"].append(path.relative_to(workspace).as_posix())
         except (ConversionError, OSError, ValueError) as exc:
@@ -195,6 +264,8 @@ def main(argv: list[str] | None = None) -> int:
             command.add_argument("directory")
             command.add_argument("--output-dir", required=True)
             command.add_argument("--recursive", action="store_true")
+            command.add_argument("--skip-existing", action="store_true",
+                                 help="Report existing destinations as skipped instead of failed.")
         else:
             command.add_argument("source")
             if name == "convert":
@@ -214,7 +285,7 @@ def main(argv: list[str] | None = None) -> int:
             sys.stdout.buffer.write(f"{destination}{os.linesep}".encode("utf-8"))
         else:
             result = batch(workspace, args.directory, args.output_dir,
-                           recursive=args.recursive, timeout=args.timeout)
+                           recursive=args.recursive, timeout=args.timeout, skip_existing=args.skip_existing)
             summary = json.dumps(result, ensure_ascii=False)
             sys.stdout.buffer.write(f"{summary}{os.linesep}".encode("utf-8"))
             return 1 if result["failed"] else 0

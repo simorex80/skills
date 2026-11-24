@@ -42,7 +42,7 @@ class UntrustedContentBoundaryTests(unittest.TestCase):
     def test_markitdown_rejects_remote_document_source(self):
         with tempfile.TemporaryDirectory() as directory:
             workspace = Path(directory).resolve()
-            with self.assertRaises(self.markitdown["ConversionError"]):
+            with self.assertRaisesRegex(self.markitdown["ConversionError"], "Only local"):
                 self.markitdown["source_path"](workspace, "https://example.invalid/payload.pdf")
 
     def test_markitdown_rejects_output_outside_workspace(self):
