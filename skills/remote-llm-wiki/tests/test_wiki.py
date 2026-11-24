@@ -50,6 +50,35 @@ class WikiTests(unittest.TestCase):
     def setUp(self):
         self.backend = FakeBackend()
 
+    def lint_pages(self, additions):
+        pages = {**wiki.DEFAULT_FILES, **additions}
+        with patch.object(wiki, "list_files", return_value=list(pages)), \
+             patch.object(wiki, "read_file", side_effect=lambda h, r, sha, p: pages[p]) as read:
+            result = wiki.lint_memory("github.com", "o/r", self.backend.head)
+        self.assertFalse(any(call.args[3].startswith("raw/assets/") for call in read.call_args_list))
+        return result["issues"]
+
+    def test_source_summary_pairing(self):
+        indexed = wiki.DEFAULT_FILES["wiki/index.md"].replace("## Sources\n", "## Sources\n[A](sources/a.md)\n")
+        for additions, kind in (
+            ({"raw/a.txt": "original"}, "missing_source_summary"),
+            ({"wiki/sources/a.md": "[Source](../../raw/a.txt)"}, "invalid_source_summary"),
+            ({"raw/a.txt": "original", "wiki/sources/a.md": "# No link"}, "invalid_source_summary"),
+            ({"raw/a.txt": "original", "raw/a.pdf": "original"}, "invalid_source_summary"),
+            ({"raw/nested/a.txt": "original"}, "nonstandard_path"),
+            ({"wiki/sources/nested/a.md": "# Nested"}, "nonstandard_path"),
+            ({"memory.yaml": "version: 1\n"}, "manifest_mismatch"),
+        ):
+            with self.subTest(additions=additions):
+                self.assertIn(kind, [i["kind"] for i in self.lint_pages(additions)])
+        self.assertEqual(self.lint_pages({
+            "wiki/index.md": indexed, "raw/a.txt": "original", "README.md": "project",
+            "wiki/sources/a.md": "[Source](../../raw/a.txt) [Asset](../../raw/assets/a.md#note)",
+            "raw/assets/a.md": "# Note",
+        }), [])
+        self.assertIn({"kind": "schema_drift", "path": "AGENTS.md", "severity": "warning"},
+                      self.lint_pages({"AGENTS.md": "# Old wording"}))
+
     def test_raw_append_only(self):
         sha = self.backend.get_snapshot("main")
         self.backend.commit("main", sha, "add source",
@@ -162,7 +191,8 @@ class WikiTests(unittest.TestCase):
         files = set(wiki.DEFAULT_FILES)
         with patch.object(wiki, "list_files", return_value=list(files)), \
              patch.object(wiki, "read_file", side_effect=lambda h, r, sha, path:
-                              "[escape](../../secret.md)" if path == "wiki/index.md" else ""):
+                              wiki.DEFAULT_FILES[path] + "[escape](../../secret.md)"
+                              if path == "wiki/index.md" else wiki.DEFAULT_FILES[path]):
             result = wiki.lint_memory("github.com", "o/r", "a" * 40)
         self.assertEqual(result["issues"][0]["kind"], "invalid_link")
 
@@ -180,7 +210,8 @@ class WikiTests(unittest.TestCase):
              patch.object(wiki, "read_file",
                           side_effect=lambda h, r, sha, p: pages.get(p, "")):
             result = wiki.lint_memory("github.com", "o/r", "a" * 40)
-        self.assertEqual(result["issues"], [])
+        self.assertFalse(any(i["kind"] in {"broken_link", "broken_anchor", "invalid_link"}
+                             for i in result["issues"]))
 
     def test_lint_invalid_scheme_and_missing_anchor(self):
         files = set(wiki.DEFAULT_FILES)
@@ -192,7 +223,7 @@ class WikiTests(unittest.TestCase):
                           side_effect=lambda h, r, sha, p: pages.get(p, "")):
             result = wiki.lint_memory("github.com", "o/r", "a" * 40)
         self.assertEqual(
-            [issue["kind"] for issue in result["issues"]],
+            [issue["kind"] for issue in result["issues"] if "severity" not in issue],
             ["invalid_link", "broken_anchor"],
         )
 
@@ -209,7 +240,7 @@ class WikiTests(unittest.TestCase):
         with patch.object(wiki, "list_files", return_value=list(pages)), \
              patch.object(wiki, "read_file", side_effect=lambda h, r, sha, p: pages[p]):
             result = wiki.lint_memory("github.com", "o/r", "a" * 40)
-        self.assertEqual(result["issues"], [
+        self.assertEqual([i for i in result["issues"] if i["kind"] != "nonstandard_path"], [
             {"kind": "broken_link", "path": "wiki/notes.MD", "target": "missing.md"},
         ])
 
@@ -260,7 +291,7 @@ class WikiTests(unittest.TestCase):
              )):
             result = wiki.lint_memory("github.com", "o/r", "a" * 40)
         self.assertEqual(
-            [i["kind"] for i in result["issues"]], ["broken_link"])
+            [i["kind"] for i in result["issues"] if i["kind"] == "broken_link"], ["broken_link"])
 
 
 if __name__ == "__main__":

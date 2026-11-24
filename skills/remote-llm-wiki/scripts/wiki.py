@@ -9,12 +9,15 @@ import re
 from pathlib import PurePosixPath
 import subprocess
 import sys
+from collections.abc import Callable
 from urllib.parse import quote, unquote, urlsplit
 
 
 MAX_CHANGES = 100
 MAX_FILE_BYTES = 1_000_000
 MAX_TOTAL_BYTES = 4_000_000
+SECTIONS = {name.lower(): name for name in ("Sources", "Entities", "Concepts", "Syntheses")}
+ASSETS = "raw/assets/"
 
 DEFAULT_FILES = {
     "AGENTS.md": """# LLM Wiki schema
@@ -293,13 +296,101 @@ def _heading_anchors(markdown: str) -> set[str]:
     return anchors
 
 
+def _source_name(path: str) -> str | None:
+    if not path.startswith("raw/") or path.count("/") != 1:
+        return None
+    name, dot, extension = path[4:].rpartition(".")
+    return name if dot and name and extension else None
+
+
+def _category(path: str) -> str | None:
+    parts = path.split("/")
+    if (len(parts) == 3 and parts[0] == "wiki" and parts[1] in SECTIONS
+            and parts[2].endswith(".md") and len(parts[2]) > 3):
+        return parts[1]
+    return None
+
+
+def _standard_path(path: str) -> bool:
+    return (path in DEFAULT_FILES or path == "wiki/overview.md"
+            or path.startswith(ASSETS) or _source_name(path) is not None
+            or _category(path) is not None)
+
+
+def _local_link(path: str, target: str) -> tuple[str | None, str]:
+    """Return a local path and fragment, or None for external links."""
+    target = target.strip()
+    parsed = urlsplit(target)
+    if parsed.scheme.lower() in {"http", "https", "mailto"} or target.startswith("//"):
+        return None, ""
+    link_path = unquote(parsed.path)
+    if parsed.scheme or parsed.netloc or link_path.startswith("/") or "\\" in link_path:
+        raise ValueError("Invalid local link")
+    relative = str(PurePosixPath(path).parent) + "/" + link_path if link_path else path
+    parts: list[str] = []
+    for part in relative.split("/"):
+        if part == "..":
+            if not parts:
+                raise ValueError("Link escapes repository")
+            parts.pop()
+        elif part not in {"", "."}:
+            parts.append(part)
+    return "/".join(parts), unquote(parsed.fragment)
+
+
+def _local_targets(path: str, markdown: str) -> set[str]:
+    targets = set()
+    for link in _markdown_targets(markdown):
+        try:
+            resolved, _ = _local_link(path, link)
+        except ValueError:
+            continue  # Reported by link lint.
+        if resolved is not None:
+            targets.add(resolved)
+    return targets
+
+
+def structural_issues(files: set[str], page: Callable[[str], str]) -> list[dict[str, str]]:
+    issues = []
+    for path in DEFAULT_FILES:
+        if path not in files:
+            issues.append({"kind": "missing_required_file", "path": path})
+    for path, kind, severity in (("AGENTS.md", "schema_drift", "warning"),
+                                 ("memory.yaml", "manifest_mismatch", "error")):
+        if path in files and not matches_default(path, page(path)):
+            issues.append({"kind": kind, "path": path, "severity": severity})
+
+    sources: dict[str, list[str]] = {}
+    summaries = {}
+    for path in sorted(files):
+        if path.startswith(("wiki/", "raw/")) and not _standard_path(path):
+            issues.append({"kind": "nonstandard_path", "path": path, "severity": "error"})
+        name = _source_name(path)
+        if name is not None:
+            sources.setdefault(name, []).append(path)
+        if _category(path) == "sources":
+            summaries[PurePosixPath(path).stem] = path
+    for name, originals in sources.items():
+        if len(originals) > 1:
+            for path in originals:
+                issues.append({"kind": "invalid_source_summary", "path": path, "target": name,
+                               "severity": "error"})
+        if name not in summaries:
+            for path in originals:
+                issues.append({"kind": "missing_source_summary", "path": path,
+                               "target": f"wiki/sources/{name}.md", "severity": "error"})
+    eligible = {path for originals in sources.values() for path in originals}
+    for name, path in summaries.items():
+        originals = sources.get(name, [])
+        linked = _local_targets(path, page(path)) & eligible
+        if len(originals) != 1 or linked != set(originals):
+            issues.append({"kind": "invalid_source_summary", "path": path, "severity": "error"})
+    return issues
+
+
 def lint_memory(host: str, repo: str, sha: str) -> dict:
     files = set(list_files(host, repo, sha))
-    problems = []
     unchecked_anchors = []
-    for required in DEFAULT_FILES:
-        if required not in files:
-            problems.append({"kind": "missing_required_file", "path": required})
     markdown_files = sorted(p for p in files if p.startswith("wiki/") and p.lower().endswith(".md"))
     cache: dict[str, str] = {}
 
@@ -308,48 +399,30 @@ def lint_memory(host: str, repo: str, sha: str) -> dict:
             cache[path] = read_file(host, repo, sha, path)
         return cache[path]
 
+    problems = structural_issues(files, page)
     for path in markdown_files:
         for original in _markdown_targets(page(path)):
-            target = original.strip()
-            parsed = urlsplit(target)
-            if parsed.scheme.lower() in {"http", "https", "mailto"} or target.startswith("//"):
-                continue
-            if parsed.scheme or parsed.netloc:
+            try:
+                resolved, fragment = _local_link(path, original)
+            except ValueError:
                 problems.append({"kind": "invalid_link", "path": path, "target": original})
                 continue
-            link_path = unquote(parsed.path)
-            fragment = unquote(parsed.fragment)
-            if link_path.startswith("/") or "\\" in link_path:
-                problems.append({"kind": "invalid_link", "path": path, "target": original})
+            if resolved is None:
                 continue
-
-            parts: list[str] = []
-            escaped_root = False
-            relative = (str(PurePosixPath(path).parent) + "/" + link_path
-                        if link_path else path)
-            for part in relative.split("/"):
-                if part == "..":
-                    if not parts:
-                        escaped_root = True
-                        break
-                    parts.pop()
-                elif part not in {"", "."}:
-                    parts.append(part)
-            if escaped_root:
-                problems.append({"kind": "invalid_link", "path": path, "target": original})
-                continue
-            resolved = "/".join(parts)
             if resolved not in files:
                 problems.append({"kind": "broken_link", "path": path, "target": original})
             elif fragment and resolved.lower().endswith(".md"):
                 try:
                     wiki_path(resolved)
+                    if resolved.startswith(ASSETS):
+                        raise WikiError("Attachment anchors are not inspected.")
                 except WikiError:
                     unchecked_anchors.append({"path": path, "target": original})
                     continue
                 if fragment.casefold() not in _heading_anchors(page(resolved)):
                     problems.append({"kind": "broken_anchor", "path": path, "target": original})
-    result = {"sha": sha, "files_checked": len(markdown_files), "issues": problems,
+    result = {"sha": sha, "files_checked": len(markdown_files),
+              "issues": problems,
               "semantic_review_required": True}
     if unchecked_anchors:
         result["unchecked_anchors"] = unchecked_anchors
