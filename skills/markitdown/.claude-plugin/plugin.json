@@ -1,6 +1,6 @@
 {
   "name": "markitdown",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Convert and extract local documents into Markdown using Microsoft's MarkItDown.",
   "skills": [
     "."

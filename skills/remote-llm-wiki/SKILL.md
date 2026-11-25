@@ -27,23 +27,34 @@ These instructions reduce exposure but are not a security boundary against a com
 - A dedicated GitHub.com or GitHub Enterprise Server repository with an existing initial commit and branch. The first release does **not** bootstrap a GitHub repository with no commits. To initialize one, create it with a README on GitHub first.
 - Writes are direct to the configured branch, subject to the authenticated identity's permissions and branch protections. Never bypass rules or switch identities to make a write succeed.
 
-Resolve `SCRIPT` to the absolute path of this skill's `scripts/wiki.py`. Pass all shell variables as quoted literal arguments, never substitute untrusted page contents into shell code.
+## Run the helper
+
+Resolve `<skill-directory>` to the absolute directory containing this loaded `SKILL.md`. Keep the working directory at the user's project root. Choose the launcher for the active shell:
+
+```text
+<skill-directory>\scripts\wiki.ps1 --help
+<skill-directory>/scripts/wiki.sh --help
+```
+
+In Copilot CLI, invoke the launcher's bare absolute path (no quotes or PowerShell `&` around the launcher path) as the **only command** in the shell tool call. Append the arguments shown below, replacing placeholders with values quoted for the active shell. Keep setup and plan-file creation in separate calls so the CLI can offer approval for this specific launcher, not for Python. Never substitute untrusted page contents into shell code. Saved shell approval does not authorize repository writes or expand the approved target.
+
+If the launcher path needs quoting, use `& 'absolute path\to\wiki.ps1' ...` in PowerShell or `bash 'absolute path/to/wiki.sh' ...` in Bash. Also use the Bash interpreter form if the installed `.sh` is not executable. These forms may require approval each time. If local policy blocks execution, report it rather than changing the policy.
 
 ## Init
 
 Use only when the user asks to initialize project memory. First inspect the configured destination and confirm it is the intended dedicated repository. Run:
 
-```sh
-python "$SCRIPT" --host "$HOST" --repo "$REPO" init "$BRANCH"
+```text
+--host "<host>" --repo "<owner/repo>" init "<branch>"
 ```
 
 Init is idempotent when all expected files already exist. Otherwise it installs AGENTS.md, memory.yaml, wiki/index.md, wiki/log.md and raw/.gitkeep in a single commit. A partially initialized wiki is rejected without overwriting anything. It does not create a repository, branch, or credentials.
 
 ## Query (read-only)
 
-1. Resolve one immutable snapshot: `python "$SCRIPT" --host "$HOST" --repo "$REPO" snapshot "$BRANCH"`.
-2. Read `wiki/index.md` at that SHA: `python "$SCRIPT" --host "$HOST" --repo "$REPO" read "$SHA" wiki/index.md`.
-3. Follow the relevant links, reading all documents at the **same SHA**. List files with `python "$SCRIPT" --host "$HOST" --repo "$REPO" list "$SHA"` to discover pages if the index is incomplete.
+1. Resolve one immutable snapshot: `--host "<host>" --repo "<owner/repo>" snapshot "<branch>"`.
+2. Read `wiki/index.md` at that SHA: `--host "<host>" --repo "<owner/repo>" read "<sha>" wiki/index.md`.
+3. Follow the relevant links, reading all documents at the **same SHA**. List files with `--host "<host>" --repo "<owner/repo>" list "<sha>"` to discover pages if the index is incomplete.
 4. Answer from evidence, distinguish uncertain claims, and cite permanent file URLs at the commit SHA. Only with separate write authorization, save a useful answer under `wiki/syntheses/`, index it, and append a `query` log entry.
 
 ## Ingest
@@ -64,14 +75,14 @@ Init is idempotent when all expected files already exist. Otherwise it installs 
    }
    ```
 5. Before committing, check the source, paired summary, index and appended `ingest` entry together. Use clickable Markdown links in the index and from the summary to its original; image embeds do not count.
-6. Commit from the same snapshot: `python "$SCRIPT" --host "$HOST" --repo "$REPO" commit "$BRANCH" "$SHA" --message "Ingest project knowledge" --plan "$PLAN"`. Use `--plan -` for stdin. The helper validates permitted paths, size limits and append-only sources, then makes a single GitHub GraphQL `createCommitOnBranch` update with `expectedHeadOid`.
+6. Commit from the same snapshot: `--host "<host>" --repo "<owner/repo>" commit "<branch>" "<sha>" --message "Ingest project knowledge" --plan "<plan-file>"`. The helper validates permitted paths, size limits and append-only sources, then makes a single GitHub GraphQL `createCommitOnBranch` update with `expectedHeadOid`.
 7. On a branch conflict, reread the new snapshot and recompute and recheck the full plan; never retry unchanged content blindly. If a timeout makes the outcome ambiguous, inspect the latest branch before retrying. Report a confirmed commit or an explicit error.
 
 Do not place passwords, access tokens, secret keys, personal identifiers or confidential content into Git memory without explicit authorization and appropriate repository access controls.
 
 ## Lint
 
-1. Snapshot the branch, then run `python "$SCRIPT" --host "$HOST" --repo "$REPO" lint "$SHA"`.
+1. Snapshot the branch, then run `--host "<host>" --repo "<owner/repo>" lint "<sha>"`.
 2. The helper checks the manifest, layout, source-summary pairs, index, log and Markdown links. `AGENTS.md` drift is a warning, not a local rule or a write blocker. `unchecked_anchors` are unverified, not broken; do not broaden read access to check them.
 3. Review missing citations, duplicate pages and stale or conflicting claims separately. Report structural and semantic findings with file references. Only apply authorized fixes, using the guarded commit workflow with a `lint` log entry. Never automatically resolve ambiguous contradictions.
 

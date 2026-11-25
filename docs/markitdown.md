@@ -20,24 +20,26 @@ Supported extensions in this wrapper: `.pdf`, `.docx`, `.pptx`, `.xlsx`, `.html`
 
 ## Three operations
 
+The commands below assume a checkout and Bash. In PowerShell, use `.\skills\markitdown\scripts\convert.ps1` with the same arguments. For installed copies, see the [launcher instructions](../skills/markitdown/SKILL.md#run-the-helper) for saving approval for a specific launcher in Copilot CLI.
+
 **Extract:** use for analysis; prints UTF-8 Markdown to standard output without leaving a persistent file. The helper creates and removes a temporary Markdown file during conversion.
 
 For large extractions (up to 4 MiB), use bounded tool output and read the complete capture in ranges if available. Use a persistent Markdown destination only when requested, and disclose any gaps if only partial output is available.
 
 ```sh
-python skills/markitdown/scripts/convert.py extract report.pdf
+./skills/markitdown/scripts/convert.sh extract report.pdf
 ```
 
 **Convert:** create a named `.md` file and print its path in UTF-8. Existing destinations are never overwritten. On filesystems without hard links, the converter creates the file exclusively, so concurrent readers may briefly see partial content.
 
 ```sh
-python skills/markitdown/scripts/convert.py convert report.pdf --output report.md
+./skills/markitdown/scripts/convert.sh convert report.pdf --output report.md
 ```
 
 **Batch:** process supported files from a workspace directory, with per-file error reporting. The UTF-8 JSON summary always includes `converted`, `skipped` and `failed`, with relative paths using `/` on every platform. Add `--recursive` only when requested. To resume, add `--skip-existing`: existing destinations are listed under `skipped` without being modified or checked for freshness. Without the flag, they count as failures.
 
 ```sh
-python skills/markitdown/scripts/convert.py batch documents --output-dir converted --recursive
+./skills/markitdown/scripts/convert.sh batch documents --output-dir converted --recursive
 ```
 
 You can ask Copilot to perform document tasks in natural language. It may select this skill automatically when relevant, but discovery and selection are not guaranteed; explicitly say “use markitdown” if you need this converter. The agent then chooses the appropriate operation. See [copyable prompts](../examples/markitdown/prompts.md), including PDF summarization, Word comparison, Excel overview, directory conversion and composition with Remote LLM Wiki.
