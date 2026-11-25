@@ -23,30 +23,44 @@ These are agent instructions, not an OS sandbox. For documents from untrusted se
 
 - Python 3.10+ and the official Microsoft `markitdown` package installed **in the same interpreter** used to run this skill. Recommended: use an isolated Python environment and install `markitdown[pdf,docx,pptx,xlsx]` from your organization's managed package repository or a trusted package index. No exact MarkItDown version is required. The upstream MarkItDown 0.1.9 package currently excludes Python 3.15; installation compatibility depends on its published metadata. Verify the installed Python API when upgrading. Do not install packages automatically.
 - Local source files must reside in the current workspace. Supported extensions: `.pdf`, `.docx`, `.pptx`, `.xlsx`, `.html`, `.htm`, `.csv`, `.json`, `.xml`, `.txt`. Additional MarkItDown formats are intentionally not enabled by this wrapper.
-- Resolve `SCRIPT` to the absolute path of `scripts/convert.py`. Execute from the workspace root; quote paths as literal shell arguments.
+
+## Run the helper
+
+Resolve `<skill-directory>` to the absolute directory containing this loaded `SKILL.md`. Keep the working directory at the workspace root. Choose the launcher for the active shell:
+
+```text
+<skill-directory>\scripts\convert.ps1 --help
+<skill-directory>/scripts/convert.sh --help
+```
+
+In Copilot CLI, invoke the launcher's bare absolute path (no quotes or PowerShell `&` around the launcher path) as the **only command** in the shell tool call. Append the operation and quote its arguments as required by the active shell. Keep setup and other commands in separate calls so the CLI can offer approval for this specific launcher, not for Python. Saved shell approval is not permission to read additional inputs or write outputs the user did not request.
+
+If the launcher path needs quoting, use `& 'absolute path\to\convert.ps1' ...` in PowerShell or `bash 'absolute path/to/convert.sh' ...` in Bash. Also use the Bash interpreter form if the installed `.sh` is not executable. These forms may require approval each time. If local policy blocks execution, report it rather than changing the policy.
+
+The PowerShell launcher uses `python` or falls back to `py -3`; the Bash launcher prefers `python3`, then `python`. Install MarkItDown in the interpreter selected by your shell before running the skill.
 
 ## Choose the operation
 
 **Extract (default for analysis)** — get Markdown via stdout without writing a persistent `.md` file:
 
-```sh
-python "$SCRIPT" extract "$SOURCE"
+```text
+extract "<source>"
 ```
 
 Use when asked to read, compare, summarize or extract information. The agent should cite the actual source document, not present an extraction as a verified verbatim representation. Markdown can reach 4 MiB even for a small input. For large or unknown-size extractions, use a tool that bounds the output shown to the agent. If the tool retains the full output temporarily, read it in ranges. Use `convert` to an approved workspace path only if the user requests persistent output. If only a partial extract is available, state what you covered; do not imply that you read the entire document.
 
 **Convert** — publish a Markdown file when the user asks for one:
 
-```sh
-python "$SCRIPT" convert "$SOURCE" --output "$DESTINATION"
+```text
+convert "<source>" --output "<destination>"
 ```
 
 Omit `--output` to place a same-basename `.md` beside the resolved source. Existing destinations are never overwritten, including when a competing process creates one during conversion. On filesystems without hard-link support, exclusive creation preserves this guarantee, but a concurrent reader may briefly see partial content.
 
 **Batch** — convert a directory of supported documents independently and print a JSON summary:
 
-```sh
-python "$SCRIPT" batch "$SOURCE_DIRECTORY" --output-dir "$DESTINATION_DIRECTORY"
+```text
+batch "<source-directory>" --output-dir "<destination-directory>"
 ```
 
 Add `--recursive` only when subdirectories are requested. The output directory must not be inside the source directory. Failed inputs are reported independently; an incomplete batch exits nonzero, and successful conversions remain published. Up to 100 matching files per batch are accepted.
