@@ -76,7 +76,7 @@ In an activated Python 3.12 or 3.13 virtual environment, install the versions us
 python -m pip install "skillevaluator[security]==1.2.1" "semgrep==1.187.0" "git+https://github.com/NVIDIA/SkillSpector.git@v2.13.7"
 ```
 
-Install [Gitleaks 8.30.0](https://github.com/gitleaks/gitleaks/releases/tag/v8.30.0) for your platform and make it available on `PATH`. Run the review from a session that can resolve the tools in that environment. The review reports missing scanners as incomplete and continues with the source review.
+SkillEvaluator can download and verify Gitleaks automatically on supported platforms, including the Ubuntu runner used in CI. The local `/review-skill` workflow uses preinstalled scanners to avoid downloading tools during a review. If Gitleaks is already available on `PATH`, no extra setup is needed. Otherwise, install [Gitleaks](https://github.com/gitleaks/gitleaks/releases) and add it to `PATH`. Version 8.30.0 matches the CI scanner. If a scanner is missing, the local workflow marks static validation as incomplete and continues with the source review.
 
 From the repository root, use `/review-skill ./skills/markitdown` for one skill or `/review-skill .` for all distributed skills. The report includes the static verdict, quality score, raw security risk and compatibility notes. A raw security risk above 50 blocks the static review. Client compatibility is advisory.
 
