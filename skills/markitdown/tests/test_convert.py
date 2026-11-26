@@ -1,7 +1,6 @@
 """Deterministic MarkItDown tests: no converter installation required."""
 import argparse
 import errno
-import importlib.util
 import io
 import json
 import subprocess
@@ -13,9 +12,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "convert.py"
-SPEC = importlib.util.spec_from_file_location("markitdown_convert", SCRIPT)
-converter = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(converter)
+sys.path.insert(0, str(SCRIPT.parent))
+import convert as converter  # noqa: E402
 
 
 class TestConvert(unittest.TestCase):

@@ -2,21 +2,20 @@
 
 Run: python -m unittest discover -s skills/remote-llm-wiki/tests -v
 """
-import importlib.util
 import contextlib
 import hashlib
 import json
 import pathlib
 import re
 import subprocess
+import sys
 import unittest
 from unittest.mock import patch
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-SPEC = importlib.util.spec_from_file_location("wiki", ROOT / "scripts" / "wiki.py")
-wiki = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(wiki)
+sys.path.insert(0, str(ROOT / "scripts"))
+import wiki  # noqa: E402
 
 
 @contextlib.contextmanager

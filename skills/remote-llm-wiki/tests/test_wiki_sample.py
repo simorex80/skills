@@ -1,17 +1,15 @@
 """Verify that the public sample satisfies the Wiki helper's contract."""
 
-import importlib.util
 from pathlib import Path
+import sys
 import unittest
 from unittest.mock import patch
 
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = SKILL_ROOT.parents[1]
-SPEC = importlib.util.spec_from_file_location(
-    "wiki", SKILL_ROOT / "scripts" / "wiki.py")
-wiki = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(wiki)
+sys.path.insert(0, str(SKILL_ROOT / "scripts"))
+import wiki  # noqa: E402
 
 
 class SampleTests(unittest.TestCase):

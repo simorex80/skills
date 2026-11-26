@@ -51,6 +51,8 @@ See [prompt examples](../examples/remote-llm-wiki/prompts.md), including prompts
 
 For manual execution, use `wiki.ps1` in PowerShell or `wiki.sh` in Bash. Follow the [launcher instructions](../skills/remote-llm-wiki/SKILL.md#run-the-helper) to let Copilot CLI save approval for the specific launcher. Shell approval does not authorize writes to the wiki.
 
+The skill intentionally declares no `allowed-tools`. In Claude Code and Copilot CLI that field pre-approves tools instead of restricting them, so the client keeps asking before each command. Static scanners may report this as a missing tool scope; it is an accepted trade-off.
+
 ### How ingestion works
 
 The agent reads relevant pages **at the same commit SHA** and proposes a single change plan. Each `raw/<name>.<ext>` pairs with `wiki/sources/<name>.md`, which links back to the original. Category pages are indexed under Sources, Entities, Concepts or Syntheses. Every ordinary write appends a dated log entry; a new source requires an `ingest` entry. With a matching manifest, existing findings do not block unrelated writes, but new findings do. GitHub writes are guarded by `expectedHeadOid`; on conflict, reread and recompute instead of replaying stale edits.

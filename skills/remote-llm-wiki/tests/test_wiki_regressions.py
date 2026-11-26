@@ -1,6 +1,5 @@
 import base64
 import contextlib
-import importlib.util
 import io
 import json
 import subprocess
@@ -22,9 +21,8 @@ REPO = "owner/repo"
 GIT_API = f"repos/{REPO}/git"
 
 
-SPEC = importlib.util.spec_from_file_location("wiki_regressions", SCRIPT)
-wiki = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(wiki)
+sys.path.insert(0, str(SCRIPT.parent))
+import wiki  # noqa: E402
 
 
 class WikiTests(unittest.TestCase):

@@ -22,6 +22,8 @@ Supported extensions in this wrapper: `.pdf`, `.docx`, `.pptx`, `.xlsx`, `.html`
 
 The commands below assume a checkout and Bash. In PowerShell, use `.\skills\markitdown\scripts\convert.ps1` with the same arguments. For installed copies, see the [launcher instructions](../skills/markitdown/SKILL.md#run-the-helper) for saving approval for a specific launcher in Copilot CLI.
 
+The skill intentionally declares no `allowed-tools`. In Claude Code and Copilot CLI that field pre-approves tools instead of restricting them, so the client keeps asking before each command. Static scanners may report this as a missing tool scope; it is an accepted trade-off.
+
 **Extract:** use for analysis; prints UTF-8 Markdown to standard output without leaving a persistent file. The helper creates and removes a temporary Markdown file during conversion.
 
 For large extractions (up to 4 MiB), use bounded tool output and read the complete capture in ranges if available. Use a persistent Markdown destination only when requested, and disclose any gaps if only partial output is available.
