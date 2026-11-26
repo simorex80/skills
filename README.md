@@ -70,13 +70,45 @@ Development agents should follow [AGENTS.md](AGENTS.md), the single repository g
 
 [`review-skill`](.agents/skills/review-skill/SKILL.md) is maintainer tooling under `.agents/skills/`. The public marketplace discovers the distributed skills under `skills/`. The review runs the same static SkillEvaluator Tier 1 checks as [Skill evaluator CI](.github/workflows/skill-evaluator.yml), then uses `security-audit` for a source review. No model key is needed.
 
-In an activated Python 3.12 or 3.13 virtual environment, install the versions used by CI:
+#### Linux and macOS
+
+In an activated Python 3.12 or 3.13 virtual environment, install the tool versions used by CI:
 
 ```sh
 python -m pip install "skillevaluator[security]==1.2.1" "semgrep==1.187.0" "git+https://github.com/NVIDIA/SkillSpector.git@v2.13.7"
 ```
 
-SkillEvaluator downloads and verifies Gitleaks on supported platforms when it is missing. This works in local reviews and on the Ubuntu CI runner. For a local review, follow the official SkillEvaluator skill's setup instructions if it asks to download a scanner. Install [Gitleaks](https://github.com/gitleaks/gitleaks/releases) separately and add it to `PATH` only if automatic setup is unavailable or you need an offline setup. If a required scanner is unavailable, the review continues with source analysis and reports static validation as incomplete.
+SkillEvaluator downloads and verifies Gitleaks on supported Linux and macOS systems, including the Ubuntu CI runner. For offline setup, install [Gitleaks 8.30.0](https://github.com/gitleaks/gitleaks/releases/tag/v8.30.0) in advance and add it to `PATH`.
+
+#### Windows with pipx
+
+1. In PowerShell, use Python 3.13 for these pipx environments. If it is missing, run `py install 3.13` with the [Python Install Manager](https://docs.python.org/3/using/windows.html). Install SkillEvaluator and inject Semgrep into its environment. The `security` extra includes Bandit and pip-audit.
+
+   ```powershell
+   $reviewPython = py -3.13 -c "import sys; print(sys.executable)"
+   pipx install --python "$reviewPython" "skillevaluator[security]==1.2.1"
+   pipx inject skillevaluator "semgrep==1.187.0"
+   ```
+
+2. If `Get-Command skillspector` already finds your SkillSpector installation, reuse it. Otherwise, with Git available on `PATH`, install the version used by CI:
+
+   ```powershell
+   pipx install --python "$reviewPython" "git+https://github.com/NVIDIA/SkillSpector.git@v2.13.7"
+   ```
+
+3. On native Windows, install [Gitleaks 8.30.0](https://github.com/gitleaks/gitleaks/releases/tag/v8.30.0) separately. Extract `gitleaks.exe` from the Windows archive for your architecture into a directory on your user `PATH`. Open a new PowerShell window after updating `PATH` and verify with `gitleaks version`.
+
+4. In the PowerShell session you will use to start Copilot, verify that SkillEvaluator can find the scanners. The environment variables apply to this session and its child processes.
+
+   ```powershell
+   $env:SKILLEVALUATOR_SKILLSPECTOR_PATH = (Get-Command skillspector -CommandType Application -ErrorAction Stop).Source
+   $env:SKILLEVALUATOR_REQUIRE_SEMGREP = '1'
+   skillevaluator doctor --tier 1 --checks security,code-integrity,dependency
+   ```
+
+#### Run the review
+
+If a required scanner is unavailable, the review continues with source analysis and reports static validation as incomplete.
 
 From the repository root, use `/review-skill ./skills/markitdown` for one skill or `/review-skill .` for all distributed skills. The report includes the static verdict, quality score, raw security risk and compatibility notes. A raw security risk above 50 blocks the static review. Client compatibility is advisory.
 
