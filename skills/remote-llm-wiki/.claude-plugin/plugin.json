@@ -1,6 +1,6 @@
 {
   "name": "remote-llm-wiki",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Work with shared LLM Wiki project memory in a dedicated remote GitHub repository without cloning it.",
   "skills": [
     "."

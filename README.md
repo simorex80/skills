@@ -52,6 +52,8 @@ claude plugin install markitdown@simorex-skills
 
 The same `skills/<name>/SKILL.md` files are used by skills.sh, Copilot, and Claude Code; no skill content is duplicated.
 
+`review-skill` is maintainer tooling, not a marketplace plugin. The `skills` CLI excludes it from discovery and installation by default.
+
 See the [getting-started guide](docs/getting-started.md) for prerequisites and a quick first task.
 
 ## Documentation

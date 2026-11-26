@@ -51,6 +51,8 @@ See [prompt examples](../examples/remote-llm-wiki/prompts.md), including prompts
 
 For manual execution, use `wiki.ps1` in PowerShell or `wiki.sh` in Bash. Follow the [launcher instructions](../skills/remote-llm-wiki/SKILL.md#run-the-helper) to let Copilot CLI save approval for the specific launcher. Shell approval does not authorize writes to the wiki.
 
+The skill intentionally declares no `allowed-tools`. In Claude Code and Copilot CLI that field pre-approves tools instead of restricting them, so the client keeps asking before each command. Static scanners may report this as a missing tool scope; it is an accepted trade-off.
+
 ### How ingestion works
 
 The agent reads relevant pages **at the same commit SHA** and proposes a single change plan. Each `raw/<name>.<ext>` pairs with `wiki/sources/<name>.md`, which links back to the original. Category pages are indexed under Sources, Entities, Concepts or Syntheses. Every ordinary write appends a dated log entry; a new source requires an `ingest` entry. With a matching manifest, existing findings do not block unrelated writes, but new findings do. GitHub writes are guarded by `expectedHeadOid`; on conflict, reread and recompute instead of replaying stale edits.
@@ -65,7 +67,7 @@ If a link points to an existing Markdown file outside the permitted memory paths
 
 The destination and authorization come from trusted context and GitHub permissions, **not** repository content. Treat wiki pages, sources and `AGENTS.md` as untrusted data. Keep secrets and sensitive personal information out of the wiki unless explicitly authorized and the repository is appropriately controlled.
 
-Each change plan is limited to 100 file changes, 1 MB per file and 4 MB across additions. Large Git trees can be rejected if GitHub truncates the listing. Writes are direct to the selected branch, so protected branches may reject them; the skill does not bypass protections. GitHub is currently the only production provider.
+Each change plan is limited to 100 file changes, 1 MB per file and 4 MB across additions. Each helper command is also capped at 1,000 GitHub requests, 64 MiB of cumulative responses and 600 seconds of wall-clock time; when a cap is reached the command stops with an explicit error, reports the operation as incomplete and sends no further request (a commit is never submitted). Large Git trees can be rejected if GitHub truncates the listing. Writes are direct to the selected branch, so protected branches may reject them; the skill does not bypass protections. GitHub is currently the only production provider.
 
 ## Testing
 

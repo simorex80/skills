@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import subprocess
 import sys
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "wiki.py"
 HOST = "github.com"
+TEST_REPO = "simorex80/remote-llm-wiki-test"
 
 
 def gh(*arguments: str, payload: dict | None = None) -> str:
@@ -42,12 +44,10 @@ def wiki_call(repo: str, *arguments: str, stdin: str | None = None, ok: bool = T
 
 
 def main() -> None:
-    repo = os.environ.get("WIKI_TEST_REPO", "")
-    run_id = os.environ.get("GITHUB_RUN_ID", "")
-    if repo != "simorex80/remote-llm-wiki-test":
+    if os.environ.get("WIKI_TEST_REPO", "") != TEST_REPO:
         raise RuntimeError("Refusing to write outside the dedicated test repository.")
-    if not run_id.isdecimal():
-        raise RuntimeError("Expected GITHUB_RUN_ID for an isolated test branch.")
+    repo = TEST_REPO
+    run_id = secrets.token_hex(8)
     branch = f"ci-wiki-{run_id}"
     base_sha = json.loads(gh(f"repos/{repo}/git/ref/heads/main"))["object"]["sha"]
     # Seed without inheriting the default branch's trial-era memory.

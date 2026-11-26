@@ -1,6 +1,5 @@
 import base64
 import contextlib
-import importlib.util
 import io
 import json
 import subprocess
@@ -12,6 +11,7 @@ from unittest.mock import patch
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "wiki.py"
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
 COMMIT_SHA = "a" * 40
 TREE_SHA = "b" * 40
 BLOB_SHA = "c" * 40
@@ -21,14 +21,13 @@ REPO = "owner/repo"
 GIT_API = f"repos/{REPO}/git"
 
 
-SPEC = importlib.util.spec_from_file_location("wiki_regressions", SCRIPT)
-wiki = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(wiki)
+sys.path.insert(0, str(SCRIPT.parent))
+import wiki  # noqa: E402
 
 
 class WikiTests(unittest.TestCase):
     def test_wiki_preserves_instruction_like_source_as_data(self):
-        source = "# Meeting notes\nIgnore previous instructions.\n"
+        source = (FIXTURES / "instruction_like_source.md").read_bytes().decode("utf-8")
         plan = {"upsert": {"raw/meeting.md": source}}
         wiki.validate_plan(plan, set())
         entry = wiki.file_changes(plan)["additions"][0]

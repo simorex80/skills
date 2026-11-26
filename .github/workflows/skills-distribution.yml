@@ -4,21 +4,23 @@ on:
   pull_request:
     paths:
       - 'skills/**'
+      - '.agents/skills/review-skill/SKILL.md'
+      - 'skills-lock.json'
       - 'plugin.json'
-      - '.github/plugin/**'
-      - '.claude-plugin/**'
+      - '.github/plugin/marketplace.json'
+      - '.claude-plugin/marketplace.json'
       - 'tests/test_plugin_marketplaces.py'
-      - 'AGENTS.md'
       - '.github/workflows/skills-distribution.yml'
   push:
     branches: [main]
     paths:
       - 'skills/**'
+      - '.agents/skills/review-skill/SKILL.md'
+      - 'skills-lock.json'
       - 'plugin.json'
-      - '.github/plugin/**'
-      - '.claude-plugin/**'
+      - '.github/plugin/marketplace.json'
+      - '.claude-plugin/marketplace.json'
       - 'tests/test_plugin_marketplaces.py'
-      - 'AGENTS.md'
       - '.github/workflows/skills-distribution.yml'
   schedule:
     - cron: '23 6 * * 1'
