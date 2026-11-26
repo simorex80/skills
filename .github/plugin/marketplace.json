@@ -11,13 +11,11 @@
     {
       "name": "remote-llm-wiki",
       "description": "Shared remote GitHub LLM Wiki memory without cloning.",
-      "version": "0.1.2",
       "source": "./skills/remote-llm-wiki"
     },
     {
       "name": "markitdown",
       "description": "Document extraction and conversion to Markdown.",
-      "version": "0.1.2",
       "source": "./skills/markitdown"
     }
   ]

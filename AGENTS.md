@@ -9,7 +9,7 @@ These instructions govern agents and contributors **maintaining this repository*
 - Preserve standalone distribution through the skills CLI/skills.sh, plus independent GitHub Copilot and Claude Code marketplace entries. Maintain `.github/plugin/marketplace.json` and `.claude-plugin/marketplace.json`, with a source path pointing to each skill directory. Do not copy SKILL.md across channels.
 - Preserve the existing repository-root `plugin.json` for backward compatibility unless a migration is explicitly approved. It is distinct from each skill's plugin metadata.
 - Use the **existing plugin layout**: `skills/<name>/SKILL.md`, `skills/<name>/plugin.json`, and `skills/<name>/.claude-plugin/plugin.json`. Do not move skill files to nested directories or change compatibility mode without proving discovery on all supported channels.
-- Every independent plugin has its own version. Keep the Copilot marketplace entry version equal to the plugin manifests' version. Claude marketplace entries omit `version` when the Claude plugin manifest declares it; avoid duplicate version sources.
+- Keep each plugin's version aligned across its Copilot and Claude manifests. Omit `version` from the plugin entries in both marketplace catalogs.
 
 ## Before changing code or behavior
 
