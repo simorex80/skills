@@ -1,16 +1,6 @@
 name: Skill tests
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'skills/**'
-      - 'tests/**'
-      - 'examples/**'
-      - 'README.md'
-      - '.github/workflows/skill-tests.yml'
-      - 'plugin.json'
-      - 'docs/**'
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -100,3 +90,19 @@ jobs:
           python-version: '3.11'
       - name: Repository contract tests
         run: python -m unittest discover -s tests -v
+
+  skill-tests-passed:
+    name: Skill tests passed
+    needs: [skill-launchers, remote-llm-wiki, markitdown, regressions]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Require successful test jobs
+        env:
+          ALL_TESTS_PASSED: >-
+            ${{ needs.skill-launchers.result == 'success'
+                && needs.remote-llm-wiki.result == 'success'
+                && needs.markitdown.result == 'success'
+                && needs.regressions.result == 'success' }}
+        run: test "$ALL_TESTS_PASSED" = true
