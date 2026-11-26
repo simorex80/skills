@@ -19,7 +19,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@v7
         with:
-          python-version: '3.12'
+          python-version: '3.14'
       - name: Install SkillEvaluator and static scanners
         run: |
           python -m pip install "skillevaluator[security]==1.2.1" "semgrep==1.187.0" \
