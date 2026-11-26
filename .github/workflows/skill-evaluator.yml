@@ -20,11 +20,13 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - name: Install SkillEvaluator and SkillSpector
+      - name: Install SkillEvaluator and static scanners
         run: |
-          python -m pip install "skillevaluator==1.2.1" \
+          python -m pip install "skillevaluator[security]==1.2.1" "semgrep==1.187.0" \
             "git+https://github.com/NVIDIA/SkillSpector.git@v2.13.7"
-      - name: Scan distributed skills
+      - name: Validate distributed skills
+        env:
+          SKILLEVALUATOR_REQUIRE_SEMGREP: '1'
         run: |
           scanner_path="$(command -v skillspector)"
           export SKILLEVALUATOR_SKILLSPECTOR_PATH="$scanner_path"
@@ -44,9 +46,10 @@ jobs:
           if not manifests:
               raise SystemExit("No distributed skills found under skills/*/SKILL.md.")
 
+          checks = "schema,version,security,pii,license,code-integrity,dependency,unicode,quality,lint,harness"
           failed = False
           with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as summary:
-              summary.write("## SkillEvaluator static security scan\n\n")
+              summary.write("## SkillEvaluator static validation\n\n")
               for index, manifest in enumerate(manifests, start=1):
                   name = html.escape(manifest.parent.name)
                   if manifest.parent.is_symlink() or manifest.is_symlink() or not manifest.is_file():
@@ -59,8 +62,8 @@ jobs:
                   with (output_dir / "scan.log").open("wb") as log:
                       result = subprocess.run(
                           ["skillevaluator", "validate", str(manifest.parent), "--type", "skill",
-                           "--tiers", "1", "--checks", "security", "--no-llm",
-                           "-r", "json", "-o", str(output_dir)],
+                           "--tiers", "1", "--checks", checks, "--no-llm", "--continue-on-failure",
+                           "-r", "json,markdown", "-o", str(output_dir)],
                           stdout=log, stderr=subprocess.STDOUT, check=False,
                       )
 
@@ -68,7 +71,7 @@ jobs:
                       report_path, = output_dir.glob("skillevaluator-output-*.json")
                       report = json.loads(report_path.read_bytes())
                       security, = (item for item in report["results"] if item["validator"] == "Security Scan")
-                      scan_passed = report["overall_passed"] is True and security["status"] == "passed"
+                      validation_passed = report["overall_passed"] is True and security["status"] == "passed"
                       score = security["skillspector_applicability"]["raw_risk_score"]
                       if type(score) is not int or not 0 <= score <= 100:
                           raise ValueError("Invalid raw risk score")
@@ -79,7 +82,7 @@ jobs:
                       continue
 
                   # SkillEvaluator can filter findings by file role. Keep the existing raw-score gate.
-                  passed = result.returncode == 0 and scan_passed and score <= 50
+                  passed = result.returncode == 0 and validation_passed and score <= 50
                   outcome = "Passed" if passed else "Blocked"
                   summary.write(f"- <code>{name}</code> · {outcome} · raw risk {score}/100 "
                                 f"(see `{output_dir.name}/`)\n")
@@ -87,7 +90,7 @@ jobs:
 
           raise SystemExit(1 if failed else 0)
           PY
-      - name: Upload security reports
+      - name: Upload validation reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
