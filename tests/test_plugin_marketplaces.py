@@ -45,10 +45,7 @@ class PluginMarketplaceTests(unittest.TestCase):
                     directory = (ROOT / source).resolve()
                     self.assertTrue(directory.is_relative_to(ROOT.resolve()))
                     self.assertTrue((directory / "SKILL.md").is_file())
-                    if path.parts[-3:] == (".github", "plugin", "marketplace.json"):
-                        self.assertRegex(plugin["version"], r"^\d+\.\d+\.\d+$")
-                    else:
-                        self.assertNotIn("version", plugin, "Claude plugin versions belong in their manifests")
+                    self.assertNotIn("version", plugin, "Plugin versions belong in their manifests")
                     self.assertTrue(plugin["description"])
 
     def test_manifests_and_skill_names_are_consistent(self):
@@ -61,21 +58,12 @@ class PluginMarketplaceTests(unittest.TestCase):
                 self.assertRegex(skill, rf"\A---\s+name:\s*{re.escape(name)}\s")
                 self.assertEqual(copilot["name"], name)
                 self.assertEqual(claude["name"], name)
+                self.assertRegex(copilot["version"], r"^\d+\.\d+\.\d+$")
                 self.assertEqual(copilot["version"], claude["version"])
                 self.assertNotIn("$schema", copilot, "Copilot must use legacy root SKILL.md discovery")
                 self.assertEqual(claude["skills"], ["."])
                 self.assertTrue(claude.get("author", {}).get("name"))
                 self.assertTrue(claude.get("repository", "").startswith("https://"))
-                for catalog_path in (
-                    ROOT / ".github/plugin/marketplace.json",
-                    ROOT / ".claude-plugin/marketplace.json",
-                ):
-                    entries = json.loads(catalog_path.read_text(encoding="utf-8"))["plugins"]
-                    entry = next(p for p in entries if p["name"] == name)
-                    if catalog_path.parts[-3:] == (".github", "plugin", "marketplace.json"):
-                        self.assertEqual(entry["version"], copilot["version"])
-                    else:
-                        self.assertNotIn("version", entry, "Claude plugin manifest owns the version")
 
 
 if __name__ == "__main__":
