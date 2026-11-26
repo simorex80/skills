@@ -52,8 +52,6 @@ claude plugin install markitdown@simorex-skills
 
 The same `skills/<name>/SKILL.md` files are used by skills.sh, Copilot, and Claude Code; no skill content is duplicated.
 
-`review-skill` is maintainer tooling, not a marketplace plugin. The `skills` CLI excludes it from discovery and installation by default.
-
 See the [getting-started guide](docs/getting-started.md) for prerequisites and a quick first task.
 
 ## Documentation
@@ -67,6 +65,20 @@ The `SKILL.md` files contain the operational instructions for agents. The guides
 ## Agent-assisted development
 
 Development agents should follow [AGENTS.md](AGENTS.md), the single repository guide for architecture, contribution, security, tests, and plugin distribution. These instructions apply to maintaining this repository, not to users installing the skills.
+
+### Review a skill locally
+
+[`review-skill`](.agents/skills/review-skill/SKILL.md) is maintainer tooling under `.agents/skills/`. The public marketplace discovers the distributed skills under `skills/`. The review runs the same static SkillEvaluator Tier 1 checks as [Skill evaluator CI](.github/workflows/skill-evaluator.yml), then uses `security-audit` for a source review. No model key is needed.
+
+In an activated Python 3.12 or 3.13 virtual environment, install the versions used by CI:
+
+```sh
+python -m pip install "skillevaluator[security]==1.2.1" "semgrep==1.187.0" "git+https://github.com/NVIDIA/SkillSpector.git@v2.13.7"
+```
+
+SkillEvaluator downloads and verifies Gitleaks on supported platforms when it is missing. This works in local reviews and on the Ubuntu CI runner. For a local review, follow the official SkillEvaluator skill's setup instructions if it asks to download a scanner. Install [Gitleaks](https://github.com/gitleaks/gitleaks/releases) separately and add it to `PATH` only if automatic setup is unavailable or you need an offline setup. If a required scanner is unavailable, the review continues with source analysis and reports static validation as incomplete.
+
+From the repository root, use `/review-skill ./skills/markitdown` for one skill or `/review-skill .` for all distributed skills. The report includes the static verdict, quality score, raw security risk and compatibility notes. A raw security risk above 50 blocks the static review. Client compatibility is advisory.
 
 ## Development and tests
 

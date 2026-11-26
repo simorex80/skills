@@ -17,12 +17,14 @@
       "computedHash": "2d7f889e6ae93c6c27d699856942c336b5b8644537496987d5571043d059b1dc",
       "installMode": "copy"
     },
-    "skill-inspector": {
-      "source": "NVIDIA/SkillSpector",
-      "commit": "02894ec5b8a0a70637df5a6b45763de92940cedd",
+    "skillevaluator": {
+      "source": "NVIDIA/SkillEvaluator",
+      "ref": "v1.2.1",
+      "commit": "f7fcd35d79d0506fadbd79f2b3ff384c98bd10f3",
       "sourceType": "github",
-      "skillPath": "skills/skill-inspector/SKILL.md",
-      "computedHash": "4fbef9625f058d6110bb62f3766fc78643da2ee15156be47777ea975b73ca47a"
+      "skillPath": "skills/skillevaluator/SKILL.md",
+      "computedHash": "0d2ef866d585dcfc27adbaa1a69e9a4cca2ae68fdab9e2700fa8ce2a0044f7be",
+      "installMode": "copy"
     }
   }
 }
