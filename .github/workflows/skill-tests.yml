@@ -12,13 +12,7 @@ on:
       - 'plugin.json'
       - 'docs/**'
   pull_request:
-    paths:
-      - 'skills/**'
-      - 'tests/**'
-      - 'examples/**'
-      - 'README.md'
-      - '.github/workflows/skill-tests.yml'
-      - 'plugin.json'
+    branches: [main]
   workflow_dispatch:
 
 permissions:
