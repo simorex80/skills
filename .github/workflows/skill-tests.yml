@@ -1,16 +1,6 @@
 name: Skill tests
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'skills/**'
-      - 'tests/**'
-      - 'examples/**'
-      - 'README.md'
-      - '.github/workflows/skill-tests.yml'
-      - 'plugin.json'
-      - 'docs/**'
   pull_request:
     branches: [main]
   workflow_dispatch:
