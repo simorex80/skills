@@ -62,11 +62,25 @@ def destination_path(workspace: Path, value: str) -> Path:
     return parent / proposed.name
 
 
+# The worker is not a CLI subcommand: only _run_worker starts it, after the parent
+# has validated the source path. Loading by path keeps __main__ from running.
+WORKER_BOOTSTRAP = (
+    "import runpy, sys; "
+    "module = runpy.run_path(sys.argv[1], run_name='markitdown_skill_worker'); "
+    "sys.exit(module['_worker'](module['Path'](sys.argv[2]), module['Path'](sys.argv[3])))"
+)
+
+
 def _run_worker(source: Path, temporary: Path, timeout: int) -> None:
-    command = [sys.executable, str(Path(__file__).resolve()), "_worker", str(source), str(temporary)]
+    script = Path(__file__).resolve()
+    command = [sys.executable, "-c", WORKER_BOOTSTRAP, str(script),
+               str(source.resolve()), str(temporary.resolve())]
     try:
-        result = subprocess.run(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                stderr=subprocess.PIPE, timeout=timeout, check=False)
+        # -c puts the working directory on sys.path; use this script's directory
+        # so files in the user's workspace cannot shadow the markitdown package.
+        result = subprocess.run(command, cwd=script.parent, stdin=subprocess.DEVNULL,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                                timeout=timeout, check=False)
     except subprocess.TimeoutExpired as exc:
         raise ConversionError(f"Conversion timed out after {timeout} seconds.") from exc
     if result.returncode:
@@ -270,12 +284,7 @@ def main(argv: list[str] | None = None) -> int:
             command.add_argument("source")
             if name == "convert":
                 command.add_argument("--output")
-    worker = subcommands.add_parser("_worker", help=argparse.SUPPRESS)
-    worker.add_argument("source")
-    worker.add_argument("temporary")
     args = parser.parse_args(argv)
-    if args.command == "_worker":
-        return _worker(Path(args.source), Path(args.temporary))
     try:
         workspace = Path.cwd().resolve()
         if args.command == "extract":

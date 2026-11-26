@@ -247,6 +247,39 @@ class TestConvert(unittest.TestCase):
                 converter.convert(self.workspace, self.source.name)
         self.assertFalse(self.source.with_suffix(".md").exists())
 
+    def test_worker_is_not_a_cli_subcommand(self):
+        target = self.workspace / "result.md"
+        with patch("sys.stderr", io.StringIO()) as stderr:
+            with self.assertRaises(SystemExit) as raised:
+                converter.main(["_worker", str(self.source), str(target)])
+        self.assertEqual(raised.exception.code, 2)
+        self.assertIn("invalid choice", stderr.getvalue())
+        self.assertFalse(target.exists())
+
+    def test_run_worker_executes_real_child_without_workspace_shadowing(self):
+        with tempfile.TemporaryDirectory() as packages, tempfile.TemporaryDirectory() as out:
+            package = Path(packages) / "markitdown"
+            package.mkdir()
+            (package / "__init__.py").write_text(
+                "class MarkItDown:\n"
+                "    def __init__(self, *, enable_plugins):\n"
+                "        assert enable_plugins is False\n"
+                "    def convert_local(self, source):\n"
+                "        class Result:\n"
+                "            text_content = '# child ' + source.rsplit('.', 1)[-1]\n"
+                "        return Result()\n",
+                encoding="utf-8",
+            )
+            (self.workspace / "markitdown.py").write_text(
+                "raise SystemExit('workspace module must not be imported')\n", encoding="utf-8")
+            result = Path(out) / "result.md"
+            previous = Path.cwd()
+            converter.os.chdir(self.workspace)
+            self.addCleanup(converter.os.chdir, previous)
+            with patch.dict(converter.os.environ, {"PYTHONPATH": packages}):
+                converter._run_worker(self.source, result, 60)
+            self.assertEqual(result.read_text(encoding="utf-8"), "# child pdf")
+
     def test_worker_timeout_and_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
             result = Path(tmp) / "result.md"

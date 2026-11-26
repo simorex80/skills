@@ -3,10 +3,12 @@
 Run: python -m unittest discover -s skills/remote-llm-wiki/tests -v
 """
 import importlib.util
+import contextlib
 import hashlib
 import json
 import pathlib
 import re
+import subprocess
 import unittest
 from unittest.mock import patch
 
@@ -16,6 +18,21 @@ SPEC = importlib.util.spec_from_file_location("wiki", ROOT / "scripts" / "wiki.p
 wiki = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(wiki)
 
+
+@contextlib.contextmanager
+def lint_snapshot(files, read):
+    """Serve a snapshot whose blobs are read through read(path); yields read paths."""
+    oids = {path: f"{index + 1:040x}" for index, path in enumerate(sorted(files))}
+    paths = {oid: path for path, oid in oids.items()}
+    reads = []
+
+    def blob(host, repo, oid):
+        reads.append(paths[oid])
+        return read(paths[oid])
+
+    with patch.object(wiki, "_snapshot_entries", return_value=oids), \
+         patch.object(wiki, "read_blob", side_effect=blob):
+        yield reads
 
 class FakeBackend:
     """In-memory snapshot backend for deterministic tests."""
@@ -226,10 +243,9 @@ class WikiTests(unittest.TestCase):
 
     def lint_pages(self, additions):
         pages = {**wiki.DEFAULT_FILES, **additions}
-        with patch.object(wiki, "list_files", return_value=list(pages)), \
-             patch.object(wiki, "read_file", side_effect=lambda h, r, sha, p: pages[p]) as read:
+        with lint_snapshot(pages, pages.__getitem__) as reads:
             result = wiki.lint_memory("github.com", "o/r", self.backend.head)
-        self.assertFalse(any(call.args[3].startswith("raw/assets/") for call in read.call_args_list))
+        self.assertFalse(any(path.startswith("raw/assets/") for path in reads))
         return result["issues"]
 
     def test_source_summary_pairing(self):
@@ -401,10 +417,9 @@ class WikiTests(unittest.TestCase):
 
     def test_lint_rejects_links_escaping_repository(self):
         files = set(wiki.DEFAULT_FILES)
-        with patch.object(wiki, "list_files", return_value=list(files)), \
-             patch.object(wiki, "read_file", side_effect=lambda h, r, sha, path:
-                              wiki.DEFAULT_FILES[path] + "[escape](../../secret.md)"
-                              if path == "wiki/index.md" else wiki.DEFAULT_FILES[path]):
+        with lint_snapshot(files, lambda path:
+                           wiki.DEFAULT_FILES[path] + "[escape](../../secret.md)"
+                           if path == "wiki/index.md" else wiki.DEFAULT_FILES[path]):
             result = wiki.lint_memory("github.com", "o/r", "a" * 40)
         self.assertEqual(result["issues"][0]["kind"], "invalid_link")
 
@@ -418,9 +433,7 @@ class WikiTests(unittest.TestCase):
             "wiki/my doc.md": "# Some Heading\n",
             "wiki/other.md": "# Other\n",
         }
-        with patch.object(wiki, "list_files", return_value=list(files)), \
-             patch.object(wiki, "read_file",
-                          side_effect=lambda h, r, sha, p: pages.get(p, "")):
+        with lint_snapshot(files, lambda p: pages.get(p, "")):
             result = wiki.lint_memory("github.com", "o/r", "a" * 40)
         self.assertFalse(any(i["kind"] in {"broken_link", "broken_anchor", "invalid_link"}
                              for i in result["issues"]))
@@ -430,9 +443,7 @@ class WikiTests(unittest.TestCase):
         pages = {
             "wiki/index.md": "[Bad](javascript:alert) [Anchor](#missing)\n",
         }
-        with patch.object(wiki, "list_files", return_value=list(files)), \
-             patch.object(wiki, "read_file",
-                          side_effect=lambda h, r, sha, p: pages.get(p, "")):
+        with lint_snapshot(files, lambda p: pages.get(p, "")):
             result = wiki.lint_memory("github.com", "o/r", "a" * 40)
         self.assertEqual(
             [issue["kind"] for issue in result["issues"] if "severity" not in issue],
@@ -443,15 +454,13 @@ class WikiTests(unittest.TestCase):
         pages = {**wiki.DEFAULT_FILES, "wiki/index.md":
                  wiki.DEFAULT_FILES["wiki/index.md"].replace(
                      "# Index", "# [Project](https://example.com)\n\n[Jump](#project)")}
-        with patch.object(wiki, "list_files", return_value=list(pages)), \
-             patch.object(wiki, "read_file", side_effect=lambda h, r, sha, p: pages[p]):
+        with lint_snapshot(pages, pages.__getitem__):
             result = wiki.lint_memory("github.com", "o/r", "a" * 40)
         self.assertEqual(result["issues"], [])
 
     def test_lint_checks_uppercase_markdown_extension(self):
         pages = {**wiki.DEFAULT_FILES, "wiki/notes.MD": "[Missing](missing.md)\n"}
-        with patch.object(wiki, "list_files", return_value=list(pages)), \
-             patch.object(wiki, "read_file", side_effect=lambda h, r, sha, p: pages[p]):
+        with lint_snapshot(pages, pages.__getitem__):
             result = wiki.lint_memory("github.com", "o/r", "a" * 40)
         self.assertEqual([i for i in result["issues"] if i["kind"] != "nonstandard_path"], [
             {"kind": "broken_link", "path": "wiki/notes.MD", "target": "missing.md"},
@@ -461,10 +470,9 @@ class WikiTests(unittest.TestCase):
         pages = {**wiki.DEFAULT_FILES, "wiki/index.md":
                  "[Setup](../README.md#setup)\n[Broken](missing.md)\n"}
         pages["README.md"] = "# Setup\n"
-        with patch.object(wiki, "list_files", return_value=list(pages)), \
-             patch.object(wiki, "read_file", side_effect=lambda h, r, sha, p: pages[p]) as read:
+        with lint_snapshot(pages, pages.__getitem__) as reads:
             result = wiki.lint_memory("github.com", "o/r", "a" * 40)
-        self.assertNotIn("README.md", [call.args[3] for call in read.call_args_list])
+        self.assertNotIn("README.md", reads)
         self.assertEqual([i for i in result["issues"] if "severity" not in i], [
             {"kind": "broken_link", "path": "wiki/index.md", "target": "missing.md"},
         ])
@@ -474,8 +482,7 @@ class WikiTests(unittest.TestCase):
 
     def test_lint_reports_missing_out_of_scope_target_as_broken_link(self):
         pages = {**wiki.DEFAULT_FILES, "wiki/index.md": "[Setup](../README.md#setup)\n"}
-        with patch.object(wiki, "list_files", return_value=list(pages)), \
-             patch.object(wiki, "read_file", side_effect=lambda h, r, sha, p: pages[p]):
+        with lint_snapshot(pages, pages.__getitem__):
             result = wiki.lint_memory("github.com", "o/r", "a" * 40)
         self.assertEqual([i for i in result["issues"] if "severity" not in i], [
             {"kind": "broken_link", "path": "wiki/index.md", "target": "../README.md#setup"},
@@ -484,13 +491,93 @@ class WikiTests(unittest.TestCase):
 
     def test_markdown_link_lint(self):
         files = {"wiki/index.md", "wiki/a.md", *wiki.DEFAULT_FILES.keys()}
-        with patch.object(wiki, "list_files", return_value=list(files)), \
-             patch.object(wiki, "read_file", side_effect=lambda h, r, sha, p: (
+        with lint_snapshot(files, lambda p: (
                  "[Exists](a.md) [Missing](missing.md)" if p == "wiki/index.md" else ""
              )):
             result = wiki.lint_memory("github.com", "o/r", "a" * 40)
         self.assertEqual(
             [i["kind"] for i in result["issues"] if i["kind"] == "broken_link"], ["broken_link"])
+
+
+class BudgetTests(unittest.TestCase):
+    def setUp(self):
+        wiki.reset_budget()
+        self.addCleanup(wiki.reset_budget)
+
+    def run_gh(self, stdout=b"ok"):
+        return patch.object(wiki.subprocess, "run", return_value=subprocess.CompletedProcess(
+            ["gh"], 0, stdout=stdout, stderr=b""))
+
+    def test_request_budget_stops_before_spawning(self):
+        with patch.object(wiki, "MAX_REQUESTS", 2):
+            wiki.reset_budget()
+            with self.run_gh() as run:
+                wiki.gh_api("github.com", ["a"])
+                wiki.gh_api("github.com", ["b"])
+                with self.assertRaisesRegex(wiki.WikiError, "request budget exhausted"):
+                    wiki.gh_api("github.com", ["c"])
+        self.assertEqual(run.call_count, 2)
+
+    def test_response_byte_budget(self):
+        with patch.object(wiki, "MAX_RESPONSE_BYTES", 5):
+            wiki.reset_budget()
+            with self.run_gh(b"abc") as run:
+                wiki.gh_api("github.com", ["a"])
+                with self.assertRaisesRegex(wiki.WikiError, "Response budget exhausted"):
+                    wiki.gh_api("github.com", ["b"])
+                with self.assertRaisesRegex(wiki.WikiError, "Response budget exhausted"):
+                    wiki.gh_api("github.com", ["c"])
+        self.assertEqual(run.call_count, 3)
+
+    def test_time_budget_and_capped_timeout(self):
+        clock = [1000.0]
+        with patch.object(wiki.time, "monotonic", side_effect=lambda: clock[0]):
+            wiki.reset_budget()
+            clock[0] += wiki.MAX_RUN_SECONDS - 5
+            with self.run_gh() as run:
+                wiki.gh_api("github.com", ["a"])
+                self.assertEqual(run.call_args.kwargs["timeout"], 5)
+                clock[0] += 5
+                with self.assertRaisesRegex(wiki.WikiError, "Time budget exhausted"):
+                    wiki.gh_api("github.com", ["b"])
+        self.assertEqual(run.call_count, 1)
+
+    def test_reset_budget_starts_a_fresh_command(self):
+        with patch.object(wiki, "MAX_REQUESTS", 1):
+            wiki.reset_budget()
+            with self.run_gh() as run:
+                wiki.gh_api("github.com", ["a"])
+                wiki.reset_budget()
+                wiki.gh_api("github.com", ["b"])
+        self.assertEqual(run.call_count, 2)
+
+    def test_exhausted_budget_aborts_commit_before_mutation(self):
+        sha, tree = "a" * 40, "c" * 40
+        tree_entries = [{"path": path, "type": "blob", "mode": "100644", "sha": f"{i + 1:040x}"}
+                        for i, path in enumerate(wiki.DEFAULT_FILES)]
+        replies = {
+            f"repos/o/r/git/commits/{sha}": json.dumps({"tree": {"sha": tree}}),
+            f"repos/o/r/git/trees/{tree}?recursive=1": json.dumps(
+                {"tree": tree_entries, "truncated": False}),
+        }
+        replies.update({f"repos/o/r/git/blobs/{entry['sha']}": wiki.DEFAULT_FILES[entry["path"]]
+                        for entry in tree_entries})
+        calls = []
+
+        def run(command, **kwargs):
+            endpoint = command[4]
+            calls.append(endpoint)
+            body = replies[endpoint]
+            return subprocess.CompletedProcess(command, 0, stdout=body.encode(), stderr=b"")
+
+        plan = {"upsert": {"wiki/log.md": wiki.DEFAULT_FILES["wiki/log.md"] + "\nx\n"}}
+        with patch.object(wiki, "MAX_REQUESTS", 3), \
+             patch.object(wiki.subprocess, "run", side_effect=run):
+            wiki.reset_budget()
+            with self.assertRaisesRegex(wiki.WikiError, "budget exhausted"):
+                wiki.commit("github.com", "o/r", "main", sha, "msg", plan)
+        self.assertNotIn("graphql", calls)
+        self.assertEqual(len(calls), 3)
 
 
 if __name__ == "__main__":

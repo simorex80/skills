@@ -9,6 +9,7 @@ import re
 from pathlib import PurePosixPath
 import subprocess
 import sys
+import time
 from collections import Counter
 from collections.abc import Callable
 from datetime import date
@@ -18,6 +19,10 @@ from urllib.parse import quote, unquote, urlsplit
 MAX_CHANGES = 100
 MAX_FILE_BYTES = 1_000_000
 MAX_TOTAL_BYTES = 4_000_000
+# Cumulative limits for one command invocation; they bound lint and pre-commit validation.
+MAX_REQUESTS = 1_000
+MAX_RESPONSE_BYTES = 64 * 1024 * 1024
+MAX_RUN_SECONDS = 600
 SECTIONS = {name.lower(): name for name in ("Sources", "Entities", "Concepts", "Syntheses")}
 ASSETS = "raw/assets/"
 
@@ -129,15 +134,50 @@ def wiki_path(value: str, *, writable: bool = False) -> str:
     raise WikiError("Path is outside the permitted memory files.")
 
 
+class _Budget:
+    """Requests, response bytes and wall-clock time spent by one command."""
+
+    def __init__(self) -> None:
+        self.requests = 0
+        self.response_bytes = 0
+        self.deadline = time.monotonic() + MAX_RUN_SECONDS
+
+    def before_request(self) -> None:
+        if self.requests >= MAX_REQUESTS:
+            raise WikiError(f"GitHub request budget exhausted ({MAX_REQUESTS} requests); "
+                            "the operation is incomplete and no further request was sent.")
+        if time.monotonic() >= self.deadline:
+            raise WikiError(f"Time budget exhausted ({MAX_RUN_SECONDS} seconds); "
+                            "the operation is incomplete and no further request was sent.")
+        self.requests += 1
+
+    def timeout(self) -> float:
+        return max(0.001, min(60.0, self.deadline - time.monotonic()))
+    def after_response(self, size: int) -> None:
+        self.response_bytes += size
+        if self.response_bytes > MAX_RESPONSE_BYTES:
+            raise WikiError(f"Response budget exhausted ({MAX_RESPONSE_BYTES} bytes); "
+                            "the operation is incomplete and no further request was sent.")
+
+
+_budget = _Budget()
+
+
+def reset_budget() -> None:
+    global _budget
+    _budget = _Budget()
+
+
 def gh_api(host: str, args: list[str], payload: dict | None = None) -> str:
     command = ["gh", "api", "--hostname", host, *args]
+    _budget.before_request()
     try:
         result = subprocess.run(
             command,
             input=None if payload is None else json.dumps(payload).encode("utf-8"),
             stdin=subprocess.DEVNULL if payload is None else None,
             capture_output=True,
-            timeout=60,
+            timeout=_budget.timeout(),
             check=False,
         )
     except FileNotFoundError as exc:
@@ -147,6 +187,7 @@ def gh_api(host: str, args: list[str], payload: dict | None = None) -> str:
     if result.returncode:
         diagnostic = result.stderr.decode("utf-8", errors="replace").strip()
         raise WikiError(diagnostic or f"gh exited with status {result.returncode}.")
+    _budget.after_response(len(result.stdout))
     return result.stdout.decode("utf-8")
 
 
@@ -176,6 +217,33 @@ def read_file(host: str, repo: str, sha: str, path: str) -> str:
             raise WikiError(f"Path does not traverse only directories: {path!r}.")
         object_sha = parse_sha(entry["sha"])
     return gh_api(host, [f"{endpoint}/blobs/{object_sha}", "-H", "Accept: application/vnd.github.raw+json"])
+
+
+def read_blob(host: str, repo: str, oid: str) -> str:
+    return gh_api(host, [f"repos/{repo}/git/blobs/{parse_sha(oid)}",
+                         "-H", "Accept: application/vnd.github.raw+json"])
+
+
+def _snapshot_reader(host: str, repo: str, entries: dict[str, str | None]) -> Callable[[str], str]:
+    """Read snapshot files by blob OID: one request per distinct blob, cached."""
+    cache: dict[str, str | UnicodeDecodeError] = {}
+
+    def page(path: str) -> str:
+        wiki_path(path)
+        oid = entries[path]
+        if oid is None:
+            raise WikiError("Cannot read a non-regular file.")
+        if oid not in cache:
+            try:
+                cache[oid] = read_blob(host, repo, oid)
+            except UnicodeDecodeError as exc:
+                cache[oid] = exc
+        content = cache[oid]
+        if isinstance(content, UnicodeDecodeError):
+            raise content
+        return content
+
+    return page
 
 
 def _snapshot_entries(host: str, repo: str, sha: str) -> dict[str, str | None]:
@@ -524,15 +592,9 @@ def _inspect(files: set[str], read: Callable[[str], str]) -> tuple[list[dict], l
 
 
 def lint_memory(host: str, repo: str, sha: str) -> dict:
-    files = set(list_files(host, repo, sha))
-    cache: dict[str, str] = {}
-
-    def page(path: str) -> str:
-        if path not in cache:
-            cache[path] = read_file(host, repo, sha, path)
-        return cache[path]
-
-    problems, unchecked_anchors = _inspect(files, page)
+    entries = _snapshot_entries(host, repo, sha)
+    files = {path for path, oid in entries.items() if oid}
+    problems, unchecked_anchors = _inspect(files, _snapshot_reader(host, repo, entries))
     result = {"sha": sha, "files_checked": len(_wiki_pages(files)),
               "issues": problems,
               "semantic_review_required": True}
@@ -586,23 +648,7 @@ def _validate_wiki_update(host: str, repo: str, entries: dict[str, str | None], 
     files = {path for path, oid in entries.items() if oid is not None}
     upsert = plan.get("upsert", {})
     delete = set(plan.get("delete", []))
-    cache: dict[str, str | UnicodeDecodeError] = {}
-
-    def page(path: str) -> str:
-        wiki_path(path)
-        oid = entries[path]
-        if oid is None:
-            raise WikiError("Cannot read a non-regular file.")
-        if oid not in cache:
-            try:
-                cache[oid] = gh_api(host, [f"repos/{repo}/git/blobs/{oid}",
-                                          "-H", "Accept: application/vnd.github.raw+json"])
-            except UnicodeDecodeError as exc:
-                cache[oid] = exc
-        content = cache[oid]
-        if isinstance(content, UnicodeDecodeError):
-            raise content
-        return content
+    page = _snapshot_reader(host, repo, entries)
 
     if "memory.yaml" not in files or not matches_default("memory.yaml", page("memory.yaml")):
         raise WikiError("memory.yaml differs from the supported V1 schema. "
@@ -707,7 +753,7 @@ def main() -> int:
     write.add_argument("--message", required=True)
     write.add_argument("--plan", required=True, help="UTF-8 JSON file, or - for stdin.")
     args = parser.parse_args()
-
+    reset_budget()
     try:
         if args.command == "snapshot":
             print(snapshot(args.host, args.repo, args.branch))

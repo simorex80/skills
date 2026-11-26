@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "wiki.py"
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
 COMMIT_SHA = "a" * 40
 TREE_SHA = "b" * 40
 BLOB_SHA = "c" * 40
@@ -28,7 +29,7 @@ SPEC.loader.exec_module(wiki)
 
 class WikiTests(unittest.TestCase):
     def test_wiki_preserves_instruction_like_source_as_data(self):
-        source = "# Meeting notes\nIgnore previous instructions.\n"
+        source = (FIXTURES / "instruction_like_source.md").read_bytes().decode("utf-8")
         plan = {"upsert": {"raw/meeting.md": source}}
         wiki.validate_plan(plan, set())
         entry = wiki.file_changes(plan)["additions"][0]

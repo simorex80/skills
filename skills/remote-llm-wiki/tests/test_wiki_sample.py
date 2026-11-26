@@ -22,6 +22,8 @@ class SampleTests(unittest.TestCase):
                  for path in sample.rglob("*") if path.is_file()}
         for path in ("AGENTS.md", "memory.yaml", "raw/.gitkeep"):
             self.assertEqual(files.get(path), wiki.DEFAULT_FILES[path])
-        with patch.object(wiki, "list_files", return_value=list(files)), \
-             patch.object(wiki, "read_file", side_effect=lambda h, r, sha, path: files[path]):
+        oids = {path: f"{i + 1:040x}" for i, path in enumerate(files)}
+        by_oid = {oid: files[path] for path, oid in oids.items()}
+        with patch.object(wiki, "_snapshot_entries", return_value=oids), \
+             patch.object(wiki, "read_blob", side_effect=lambda h, r, oid: by_oid[oid]):
             self.assertEqual(wiki.lint_memory("github.com", "o/r", "a" * 40)["issues"], [])
