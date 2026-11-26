@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'skills/**'
+      - '.agents/skills/review-skill/SKILL.md'
       - 'plugin.json'
       - '.github/plugin/**'
       - '.claude-plugin/**'
@@ -14,6 +15,7 @@ on:
     branches: [main]
     paths:
       - 'skills/**'
+      - '.agents/skills/review-skill/SKILL.md'
       - 'plugin.json'
       - '.github/plugin/**'
       - '.claude-plugin/**'

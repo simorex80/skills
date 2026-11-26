@@ -1,6 +1,8 @@
 ---
 name: review-skill
 description: Use when a maintainer invokes /review-skill or explicitly asks for both skill-inspector and security-audit on one local agent skill or on every skill a local repository distributes.
+metadata:
+  internal: "true"
 ---
 
 # Review Skill
