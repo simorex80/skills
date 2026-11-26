@@ -20,10 +20,14 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - name: Install SkillSpector
-        run: python -m pip install "git+https://github.com/NVIDIA/SkillSpector.git@v2.13.7"
+      - name: Install SkillEvaluator and SkillSpector
+        run: |
+          python -m pip install "skillevaluator==1.2.1" \
+            "git+https://github.com/NVIDIA/SkillSpector.git@v2.13.7"
       - name: Scan distributed skills
         run: |
+          scanner_path="$(command -v skillspector)"
+          export SKILLEVALUATOR_SKILLSPECTOR_PATH="$scanner_path"
           python - <<'PY'
           import html
           import json
@@ -42,7 +46,7 @@ jobs:
 
           failed = False
           with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as summary:
-              summary.write("## SkillSpector static scan\n\n")
+              summary.write("## SkillEvaluator static security scan\n\n")
               for index, manifest in enumerate(manifests, start=1):
                   name = html.escape(manifest.parent.name)
                   if manifest.parent.is_symlink() or manifest.is_symlink() or not manifest.is_file():
@@ -50,35 +54,40 @@ jobs:
                       failed = True
                       continue
 
-                  report = reports / f"skill-{index}.json"
-                  log = reports / f"skill-{index}.stderr.txt"
-                  with report.open("wb") as output, log.open("wb") as errors:
+                  output_dir = reports / f"skill-{index}"
+                  output_dir.mkdir()
+                  with (output_dir / "scan.log").open("wb") as log:
                       result = subprocess.run(
-                          ["skillspector", "scan", str(manifest.parent), "--no-llm",
-                           "--fail-on-incomplete", "--format", "json"],
-                          stdout=output, stderr=errors, check=False,
+                          ["skillevaluator", "validate", str(manifest.parent), "--type", "skill",
+                           "--tiers", "1", "--checks", "security", "--no-llm",
+                           "-r", "json", "-o", str(output_dir)],
+                          stdout=log, stderr=subprocess.STDOUT, check=False,
                       )
 
                   try:
-                      risk = json.loads(report.read_bytes())["risk_assessment"]
-                      score = int(risk["score"])
-                      recommendation = html.escape(risk["recommendation"])
-                  except (ValueError, KeyError, TypeError, AttributeError):
-                      summary.write(f"- <code>{name}</code> · Invalid or missing report "
-                                    f"(exit {result.returncode}, {report.name})\n")
+                      report_path, = output_dir.glob("skillevaluator-output-*.json")
+                      report = json.loads(report_path.read_bytes())
+                      security, = (item for item in report["results"] if item["validator"] == "Security Scan")
+                      scan_passed = report["overall_passed"] is True and security["status"] == "passed"
+                      score = security["skillspector_applicability"]["raw_risk_score"]
+                      if type(score) is not int or not 0 <= score <= 100:
+                          raise ValueError("Invalid raw risk score")
+                  except (ValueError, KeyError, TypeError, OSError):
+                      summary.write(f"- <code>{name}</code> · Missing or incomplete scanner evidence "
+                                    f"(exit {result.returncode}, see `{output_dir.name}/`)\n")
                       failed = True
                       continue
 
-                  outcome = {0: "Passed", 1: "Blocked", 2: "Scanner error"}.get(
-                      result.returncode, "Scanner error"
-                  )
-                  summary.write(f"- <code>{name}</code> · {outcome} · {recommendation} "
-                                f"({score}/100, {report.name})\n")
-                  failed |= result.returncode != 0
+                  # SkillEvaluator can filter findings by file role. Keep the existing raw-score gate.
+                  passed = result.returncode == 0 and scan_passed and score <= 50
+                  outcome = "Passed" if passed else "Blocked"
+                  summary.write(f"- <code>{name}</code> · {outcome} · raw risk {score}/100 "
+                                f"(see `{output_dir.name}/`)\n")
+                  failed |= not passed
 
           raise SystemExit(1 if failed else 0)
           PY
-      - name: Upload SkillSpector reports
+      - name: Upload security reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
