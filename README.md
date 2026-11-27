@@ -68,49 +68,71 @@ Development agents should follow [AGENTS.md](AGENTS.md), the single repository g
 
 ### Review a skill locally
 
-[`review-skill`](.agents/skills/review-skill/SKILL.md) is maintainer tooling under `.agents/skills/`. The public marketplace discovers the distributed skills under `skills/`. The review runs the same static SkillEvaluator Tier 1 checks as [Skill evaluator CI](.github/workflows/skill-evaluator.yml), then uses `security-audit` for a source review. No model key is needed.
+Use [SkillEvaluator](.agents/skills/skillevaluator/SKILL.md) to run static Tier 1 checks on the distributed skills under `skills/`. These checks cover skill structure, quality, security, secrets, dependencies, and client compatibility. No model key is needed. Static skill validation does not replace a source-level security audit of a codebase.
 
-#### Linux and macOS
+#### Install with pipx (Windows, Linux, and macOS)
 
-In an activated Python 3.12 or 3.13 virtual environment, install the tool versions used by CI:
+Use Python 3.13 and [pipx](https://pipx.pypa.io/stable/installation/). Run `pipx ensurepath` and open a new terminal if the pipx application directory is not already on your `PATH`.
 
-```sh
-python -m pip install "skillevaluator[security]==1.2.1" "semgrep==1.187.0" "git+https://github.com/NVIDIA/SkillSpector.git@v2.13.7"
-```
+1. Select the Python interpreter in your shell:
 
-SkillEvaluator downloads and verifies Gitleaks on supported Linux and macOS systems, including the Ubuntu CI runner. For offline setup, install [Gitleaks 8.30.0](https://github.com/gitleaks/gitleaks/releases/tag/v8.30.0) in advance and add it to `PATH`.
-
-#### Windows with pipx
-
-1. In PowerShell, use Python 3.13 for these pipx environments. If it is missing, run `py install 3.13` with the [Python Install Manager](https://docs.python.org/3/using/windows.html). Install SkillEvaluator and inject Semgrep into its environment. The `security` extra includes Bandit and pip-audit.
-
+   Windows (PowerShell): if Python 3.13 is missing, run `py install 3.13` with the [Python Install Manager](https://docs.python.org/3/using/windows.html).
    ```powershell
    $reviewPython = py -3.13 -c "import sys; print(sys.executable)"
+   ```
+
+   Linux and macOS: make sure `python3.13` is on your `PATH`.
+   ```sh
+   reviewPython=$(python3.13 -c 'import sys; print(sys.executable)')
+   ```
+
+2. In the same terminal, install the SkillEvaluator and Semgrep versions used by CI. The `security` extra includes Bandit and pip-audit. Inject Semgrep so SkillEvaluator can find it in its own environment.
+
+   ```sh
    pipx install --python "$reviewPython" "skillevaluator[security]==1.2.1"
    pipx inject skillevaluator "semgrep==1.187.0"
    ```
 
-2. If `Get-Command skillspector` already finds your SkillSpector installation, reuse it. Otherwise, with Git available on `PATH`, install the version used by CI:
+3. If `skillspector` is not already on your `PATH`, install the version used by CI in a separate pipx environment. This requires Git on your `PATH`.
 
-   ```powershell
+   ```sh
    pipx install --python "$reviewPython" "git+https://github.com/NVIDIA/SkillSpector.git@v2.13.7"
    ```
 
-3. On native Windows, install [Gitleaks 8.30.0](https://github.com/gitleaks/gitleaks/releases/tag/v8.30.0) separately. Extract `gitleaks.exe` from the Windows archive for your architecture into a directory on your user `PATH`. Open a new PowerShell window after updating `PATH` and verify with `gitleaks version`.
+4. Set up [Gitleaks 8.30.0](https://github.com/gitleaks/gitleaks/releases/tag/v8.30.0) for the `code-integrity` check. It is a standalone binary, not a pipx package.
 
-4. In the PowerShell session you will use to start Copilot, verify that SkillEvaluator can find the scanners. The environment variables apply to this session and its child processes.
+   - **Windows:** SkillEvaluator 1.2.1 does not download Gitleaks automatically. On x64 Windows, download `gitleaks_8.30.0_windows_x64.zip` and `gitleaks_8.30.0_checksums.txt` from the release. Compare `Get-FileHash .\gitleaks_8.30.0_windows_x64.zip -Algorithm SHA256` with the matching entry before extracting `gitleaks.exe` into a directory on your user `PATH`. Open a new PowerShell window after changing `PATH` and check that `gitleaks version` reports `8.30.0`. The release does not provide a native Windows ARM64 archive.
+   - **Linux and macOS:** On x64 and ARM64, SkillEvaluator downloads and verifies the pinned binary when a check first needs it and no `gitleaks` is on `PATH`. For offline use or a platform without a managed build, install a compatible release binary on `PATH` before running the check.
 
+5. In the terminal you will use to run SkillEvaluator, point it at the SkillSpector executable on `PATH` and require Semgrep, as in CI.
+
+   Windows (PowerShell):
    ```powershell
    $env:SKILLEVALUATOR_SKILLSPECTOR_PATH = (Get-Command skillspector -CommandType Application -ErrorAction Stop).Source
    $env:SKILLEVALUATOR_REQUIRE_SEMGREP = '1'
+   ```
+
+   Linux and macOS (POSIX shell):
+   ```sh
+   export SKILLEVALUATOR_SKILLSPECTOR_PATH="$(command -v skillspector)"
+   export SKILLEVALUATOR_REQUIRE_SEMGREP=1
+   ```
+
+   Then verify that SkillEvaluator can find the scanners, including Gitleaks through `code-integrity`. On a supported platform, this command can trigger the managed download:
+   ```sh
    skillevaluator doctor --tier 1 --checks security,code-integrity,dependency
    ```
 
 #### Run the review
 
-If a required scanner is unavailable, the review continues with source analysis and reports static validation as incomplete.
+From the repository root, validate one skill or all distributed skills:
 
-From the repository root, use `/review-skill ./skills/markitdown` for one skill or `/review-skill .` for all distributed skills. The report includes the static verdict, quality score, raw security risk and compatibility notes. A raw security risk above 50 blocks the static review. Client compatibility is advisory.
+```sh
+skillevaluator validate ./skills/markitdown --tiers 1 --no-llm --continue-on-failure -r cli,json,markdown -o reports/markitdown
+skillevaluator validate ./skills --tiers 1 --no-llm --continue-on-failure -r cli,json,markdown -o reports/skills
+```
+
+Treat missing scanner evidence as incomplete. The [CI workflow](.github/workflows/skill-evaluator.yml) also blocks a raw SkillSpector risk score above 50; the local CLI exit code alone does not enforce that repository-specific threshold.
 
 ## Development and tests
 
